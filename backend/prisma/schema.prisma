@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleType {
+  OWNER
+  ADMIN
+  STUDENT
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String?
+  role      RoleType @default(STUDENT)
+  /// ACTIVE | PENDING | REJECTED — new students register as PENDING until Superadmin (OWNER) approves
+  accountStatus String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions      Submission[]
+  examAssignments  ExamAssignment[]
+  createdExams     Exam[]           @relation("ExamCreator")
+  moderationLogs   ModerationLog[]
+}
+
+model Question {
+  id          Int      @id @default(autoincrement())
+  title       String
+  type        String // "mcq" | "theory"
+  body        String?
+  options     Json?
+  correct     Json?
+  createdBy   Int?
+  createdAt   DateTime @default(now())
+  /// APPROVED | PENDING | REJECTED — ADMIN-created questions start PENDING; OWNER-created APPROVED
+  approvalStatus String @default("APPROVED")
+
+  submissions   Submission[]
+  examQuestions ExamQuestion[]
+}
+
+model Submission {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  questionId Int
+  examId     Int?
+  answer     Json
+  score      Float?
+  graded     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+  exam     Exam?    @relation(fields: [examId], references: [id])
+}
+
+model Exam {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  duration    Int? // duration in minutes
+  createdBy   Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// When false, students do not see scores for this exam (email when published)
+  resultsPublished   Boolean   @default(false)
+  resultsPublishedAt DateTime?
+
+  creator     User             @relation("ExamCreator", fields: [createdBy], references: [id])
+  questions   ExamQuestion[]
+  assignments ExamAssignment[]
+  submissions Submission[]
+}
+
+model ExamQuestion {
+  id         Int @id @default(autoincrement())
+  examId     Int
+  questionId Int
+  sortOrder  Int @default(0)
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, questionId])
+}
+
+model ExamAssignment {
+  id         Int       @id @default(autoincrement())
+  examId     Int
+  userId     Int
+  assignedAt DateTime  @default(now())
+  /// Set when student has submitted all questions in this exam folder
+  examSubmittedAt DateTime?
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([examId, userId])
+}
+
+/// Superadmin (OWNER) audit trail: question & student approvals/rejections
+model ModerationLog {
+  id         Int      @id @default(autoincrement())
+  actorId    Int
+  entityType String // QUESTION | USER
+  entityId   Int
+  action     String // QUESTION_APPROVE | QUESTION_REJECT | USER_APPROVE | USER_REJECT
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+}
