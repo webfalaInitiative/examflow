@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
+import WebfalaLogo from '../components/WebfalaLogo';
 
 export default function Register() {
   const { user, loading, register } = useAuth();
@@ -36,10 +37,11 @@ export default function Register() {
   return (
     <div className="auth-container">
       <div className="auth-card" role="main" aria-labelledby="register-title">
-        <div className="brand">
-          <div className="logo">EF</div>
-          <h1 id="register-title">Create an account</h1>
-        </div>
+        <WebfalaLogo />
+        <p className="auth-app-name">Exam Flow</p>
+        <h1 id="register-title" className="visually-hidden">
+          Create an account
+        </h1>
 
         <p className="helper">Create an account to start taking assessments.</p>
 

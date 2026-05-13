@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 
+import WebfalaLogo from '../components/WebfalaLogo';
+
 export default function Login() {
   const { user, loading, login } = useAuth();
   const router = useRouter();
@@ -62,10 +64,11 @@ export default function Login() {
   return (
     <div className="auth-container">
       <div className="auth-card" role="main" aria-labelledby="login-title">
-        <div className="brand">
-          <div className="logo">EF</div>
-          <h1 id="login-title">Exam Flow</h1>
-        </div>
+        <WebfalaLogo />
+        <p className="auth-app-name">Exam Flow</p>
+        <h1 id="login-title" className="visually-hidden">
+          Sign in
+        </h1>
 
         <p className="helper">Sign in to access your assessments and dashboard.</p>
 

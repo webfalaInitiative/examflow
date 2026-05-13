@@ -97,7 +97,7 @@ model ExamAssignment {
   userId     Int
   assignedAt DateTime  @default(now())
   /// Set when student has submitted all questions in this exam folder
-  examSubmittedAt DateTime?
+  manualTheoryPercent Float? /// 0–100: admin-entered theory score on scoreboard; combined with MCQ before publish
 
   exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import WebfalaLogo from './WebfalaLogo';
 
 export default function DashboardLayout({ children }) {
   const { user, loading, logout } = useAuth();
@@ -60,7 +61,7 @@ export default function DashboardLayout({ children }) {
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo">EF</div>
+          <WebfalaLogo variant="compact" />
           <span className="sidebar-title">Exam Flow</span>
         </div>
 

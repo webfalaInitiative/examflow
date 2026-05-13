@@ -73,7 +73,7 @@ router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, ne
   }
 });
 
-// Per-student combined score (MCQ + theory) out of 100% when all items graded
+// Per-student combined score: MCQ (objective) + theory (scoreboard column and/or per-question grades)
 router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
@@ -102,39 +102,90 @@ router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async 
         });
         const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
 
+        const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
+        const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
+        const manual =
+          a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
+            ? a.manualTheoryPercent
+            : null;
+
         let mcqPoints = 0;
-        let mcqTotal = 0;
+        let mcqGradedCount = 0;
         let theoryPoints = 0;
-        let theoryTotal = 0;
-        let allGraded = true;
+        let theoryGradedCount = 0;
 
         for (const eq of exam.questions) {
           const q = eq.question;
           const s = byQ.get(eq.questionId);
           if (q.type === 'mcq') {
-            mcqTotal += 1;
-            if (s && s.graded && s.score != null) mcqPoints += s.score;
-            else allGraded = false;
-          } else {
-            theoryTotal += 1;
-            if (s && s.graded && s.score != null) theoryPoints += s.score;
-            else allGraded = false;
+            if (s && s.graded && s.score != null) {
+              mcqPoints += s.score;
+              mcqGradedCount += 1;
+            }
+          } else if (s && s.graded && s.score != null) {
+            theoryPoints += s.score;
+            theoryGradedCount += 1;
           }
         }
 
-        const mcqPercent = mcqTotal > 0 ? (mcqPoints / mcqTotal) * 100 : null;
-        const theoryPercent = theoryTotal > 0 ? (theoryPoints / theoryTotal) * 100 : null;
-        const finalPercent = n > 0 && allGraded ? ((mcqPoints + theoryPoints) / n) * 100 : null;
+        const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+
+        let theoryPercent = null;
+        if (nTheory > 0) {
+          if (manual != null) {
+            theoryPercent = manual;
+          } else if (theoryGradedCount === nTheory) {
+            theoryPercent = (theoryPoints / nTheory) * 100;
+          }
+        } else if (nMcq > 0 && manual != null) {
+          theoryPercent = manual;
+        }
+
+        const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
+        const theoryReady =
+          nTheory === 0 ||
+          manual != null ||
+          theoryGradedCount === nTheory;
+
+        const gradingComplete = mcqReady && theoryReady;
+
+        let finalPercent = null;
+        if (gradingComplete) {
+          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : 0;
+          let thP = 0;
+          let theoryWeight = 0;
+          if (nTheory > 0) {
+            theoryWeight = nTheory;
+            thP =
+              manual != null
+                ? manual
+                : theoryGradedCount === nTheory
+                  ? (theoryPoints / nTheory) * 100
+                  : 0;
+          } else if (nMcq > 0 && manual != null) {
+            theoryWeight = 1;
+            thP = manual;
+          }
+          const totalW = nMcq + theoryWeight;
+          if (totalW > 0) {
+            finalPercent = (mcqP * nMcq + thP * theoryWeight) / totalW;
+          }
+        }
 
         return {
           user: a.user,
-          assignment: { examSubmittedAt: a.examSubmittedAt },
+          assignment: {
+            examSubmittedAt: a.examSubmittedAt,
+            manualTheoryPercent: a.manualTheoryPercent,
+          },
           mcqPercent,
           theoryPercent,
           finalPercent,
-          gradingComplete: allGraded,
+          gradingComplete,
           answeredCount: subs.length,
           questionCount: n,
+          nMcq,
+          nTheory,
         };
       })
     );
@@ -144,6 +195,41 @@ router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async 
     next(err);
   }
 });
+
+// Set manual theory % for a student (0–100). Combined with MCQ objective on scoreboard. Send null to clear.
+router.patch(
+  '/:id/assignments/:userId/theory-score',
+  verifyToken,
+  requireRole('OWNER', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const examId = parseInt(req.params.id);
+      const userId = parseInt(req.params.userId);
+      const raw = req.body.manualTheoryPercent;
+
+      if (raw === null || raw === '') {
+        const cleared = await prisma.examAssignment.update({
+          where: { examId_userId: { examId, userId } },
+          data: { manualTheoryPercent: null },
+        });
+        return res.json(cleared);
+      }
+
+      const val = parseFloat(raw);
+      if (Number.isNaN(val) || val < 0 || val > 100) {
+        return res.status(400).json({ error: 'manualTheoryPercent must be between 0 and 100' });
+      }
+
+      const updated = await prisma.examAssignment.update({
+        where: { examId_userId: { examId, userId } },
+        data: { manualTheoryPercent: val },
+      });
+      res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // Publish results — students can then see scores; sends email to each assigned student
 router.post('/:id/publish-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
