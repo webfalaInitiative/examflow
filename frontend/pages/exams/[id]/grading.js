@@ -83,6 +83,21 @@ export default function ExamGradingPage() {
     setPublishing(false);
   };
 
+  const unpublish = async () => {
+    if (!window.confirm('Unpublish results for this exam? Students will no longer see their scores or feedback.')) return;
+    setPublishing(true);
+    setMsg('');
+    try {
+      const r = await api.post(`/exams/${id}/unpublish-results`);
+      setExam(r.data);
+      await load();
+      setMsg('Results unpublished. You can now make changes and publish again.');
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'Unpublish failed');
+    }
+    setPublishing(false);
+  };
+
   if (!user || !isStaff) return null;
 
   return (
@@ -108,14 +123,21 @@ export default function ExamGradingPage() {
                 {publishing ? 'Publishing…' : 'Publish results & notify students'}
               </button>
             )}
-            {exam?.resultsPublished && <span className="badge green">Results published</span>}
+            {exam?.resultsPublished && (
+              <>
+                <span className="badge green">Results published</span>
+                <button type="button" className="btn-sm btn-danger" disabled={publishing} onClick={unpublish}>
+                  {publishing ? 'Unpublishing…' : 'Unpublish results'}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {msg && (
           <p
             className={
-              msg === 'Theory score saved.' || msg.startsWith('Results published') ? 'helper' : 'error'
+              msg === 'Theory score saved.' || msg.startsWith('Results published') || msg.startsWith('Results unpublished') ? 'helper' : 'error'
             }
             style={{ marginBottom: 12 }}
           >

@@ -64,6 +64,14 @@ export default function SubmissionsPage() {
                   : String(gradeModal.answer)}
               </div>
             </div>
+            {gradeModal.question?.type === 'theory' && gradeModal.question?.correct && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: 14, borderRadius: 'var(--radius-sm)', marginBottom: 14, fontSize: 14 }}>
+                <strong style={{ color: '#047857' }}>Expected Answer / Rubric:</strong>
+                <div style={{ marginTop: 6, whiteSpace: 'pre-wrap', color: '#065f46' }}>
+                  {String(gradeModal.question.correct)}
+                </div>
+              </div>
+            )}
             <form onSubmit={handleGrade}>
               <label>Score (0 – 100%)</label>
               <input

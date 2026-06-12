@@ -263,6 +263,178 @@ router.post('/:id/publish-results', verifyToken, requireRole('OWNER', 'ADMIN'), 
   }
 });
 
+// Unpublish results — sets resultsPublished to false, resultsPublishedAt to null
+router.post('/:id/unpublish-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const examId = parseInt(req.params.id);
+    const exam = await prisma.exam.update({
+      where: { id: examId },
+      data: {
+        resultsPublished: false,
+        resultsPublishedAt: null,
+      },
+    });
+    res.json(exam);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get student's own exam folder results (MCQ%, Theory%, Final score)
+router.get('/my-results', verifyToken, async (req, res, next) => {
+  try {
+    const userId = req.user.sub;
+
+    // Get all assignments for this student
+    const assignments = await prisma.examAssignment.findMany({
+      where: { userId },
+      include: {
+        exam: {
+          include: {
+            questions: {
+              include: { question: { select: { id: true, type: true } } },
+            },
+          },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    const results = await Promise.all(
+      assignments.map(async (a) => {
+        const exam = a.exam;
+        const examId = exam.id;
+
+        // Count questions
+        const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
+        const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
+
+        // If results are not published yet, return redacted/pending status
+        if (!exam.resultsPublished) {
+          return {
+            examId,
+            title: exam.title,
+            description: exam.description,
+            examSubmittedAt: a.examSubmittedAt,
+            resultsPublished: false,
+            mcqPercent: null,
+            theoryPercent: null,
+            finalPercent: null,
+            status: a.examSubmittedAt ? 'Results pending' : 'Incomplete',
+            nQuestions: exam.questions.length,
+          };
+        }
+
+        // If published, calculate scores
+        const subs = await prisma.submission.findMany({
+          where: { userId, examId },
+          include: { question: { select: { id: true, type: true } } },
+        });
+
+        const qIds = new Set(exam.questions.map((eq) => eq.questionId));
+        const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
+
+        const manual =
+          a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
+            ? a.manualTheoryPercent
+            : null;
+
+        let mcqPoints = 0;
+        let mcqGradedCount = 0;
+        let theoryPoints = 0;
+        let theoryGradedCount = 0;
+
+        for (const eq of exam.questions) {
+          const q = eq.question;
+          const s = byQ.get(eq.questionId);
+          if (q.type === 'mcq') {
+            if (s && s.graded && s.score != null) {
+              mcqPoints += s.score;
+              mcqGradedCount += 1;
+            }
+          } else if (s && s.graded && s.score != null) {
+            theoryPoints += s.score;
+            theoryGradedCount += 1;
+          }
+        }
+
+        const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+
+        let theoryPercent = null;
+        if (nTheory > 0) {
+          if (manual != null) {
+            theoryPercent = manual;
+          } else if (theoryGradedCount === nTheory) {
+            theoryPercent = (theoryPoints / nTheory) * 100;
+          }
+        } else if (nMcq > 0 && manual != null) {
+          theoryPercent = manual;
+        }
+
+        const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
+        const theoryReady =
+          nTheory === 0 ||
+          manual != null ||
+          theoryGradedCount === nTheory;
+
+        const gradingComplete = mcqReady && theoryReady;
+
+        let finalPercent = null;
+        if (gradingComplete) {
+          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : 0;
+          let thP = 0;
+          let theoryWeight = 0;
+          if (nTheory > 0) {
+            theoryWeight = nTheory;
+            thP =
+              manual != null
+                ? manual
+                : theoryGradedCount === nTheory
+                  ? (theoryPoints / nTheory) * 100
+                  : 0;
+          } else if (nMcq > 0 && manual != null) {
+            theoryWeight = 1;
+            thP = manual;
+          }
+          const totalW = nMcq + theoryWeight;
+          if (totalW > 0) {
+            finalPercent = (mcqP * nMcq + thP * theoryWeight) / totalW;
+          }
+        }
+
+        // Determine passed/failed status
+        let status = 'Pending';
+        if (a.examSubmittedAt) {
+          if (gradingComplete && finalPercent != null) {
+            status = finalPercent >= 50 ? 'Passed' : 'Failed';
+          } else {
+            status = 'Pending';
+          }
+        } else {
+          status = 'Incomplete';
+        }
+
+        return {
+          examId,
+          title: exam.title,
+          description: exam.description,
+          examSubmittedAt: a.examSubmittedAt,
+          resultsPublished: true,
+          mcqPercent,
+          theoryPercent,
+          finalPercent,
+          status,
+          nQuestions: exam.questions.length,
+        };
+      })
+    );
+
+    res.json(results);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get single exam details
 router.get('/:id', verifyToken, async (req, res, next) => {
   try {

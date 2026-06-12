@@ -87,7 +87,7 @@ router.get('/', verifyToken, async (req, res, next) => {
       where,
       include: {
         user: { select: { id: true, name: true, email: true } },
-        question: { select: { id: true, title: true, type: true } },
+        question: { select: { id: true, title: true, type: true, correct: req.user.role !== 'STUDENT' } },
         exam: { select: { id: true, title: true, resultsPublished: true } },
       },
       orderBy: { createdAt: 'desc' },

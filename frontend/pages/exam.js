@@ -150,6 +150,16 @@ export default function ExamPage() {
       setResults((prev) => ({ ...prev, [questionId]: res.data }));
       setSubmissions((prev) => [...prev, res.data]);
 
+      // Advance to next unanswered question (so Next becomes available)
+      if (examId && orderedQuestions.length) {
+        const nextSubs = [...submissions, res.data];
+        const answered = new Set(nextSubs.map((s) => s.questionId));
+        const nextIndex = orderedQuestions.findIndex((q) => !answered.has(q.id));
+        if (nextIndex !== -1) {
+          setStep(nextIndex);
+        }
+      }
+
       if (examId && orderedQuestions.length) {
         const nextSubs = [...submissions, res.data];
         const answered = new Set(nextSubs.map((s) => s.questionId));
@@ -170,7 +180,7 @@ export default function ExamPage() {
   }, []);
 
   const goNext = useCallback(() => {
-    setStep((s) => Math.min(Math.max(orderedQuestions.length - 1, 0), s + 1));
+    setStep((s) => Math.min(s + 1, Math.max(orderedQuestions.length - 1, 0)));
   }, [orderedQuestions.length]);
 
   const currentQ = isExamMode && orderedQuestions.length ? orderedQuestions[step] : null;

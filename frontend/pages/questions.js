@@ -9,9 +9,16 @@ export default function QuestionsPage() {
   const [questions, setQuestions] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0 });
+  const [form, setForm] = useState({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importFile, setImportFile] = useState(null);
+  const [importError, setImportError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importSuccess, setImportSuccess] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -23,7 +30,7 @@ export default function QuestionsPage() {
   };
 
   const resetForm = () => {
-    setForm({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0 });
+    setForm({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '' });
     setEditId(null);
     setError('');
   };
@@ -33,12 +40,15 @@ export default function QuestionsPage() {
   const openEdit = (q) => {
     const opts = q.type === 'mcq' && q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : ['', '', '', ''];
     let correctIdx = 0;
+    let correctTxt = '';
     if (q.type === 'mcq' && q.correct != null) {
       const correct = typeof q.correct === 'string' ? q.correct : JSON.stringify(q.correct);
       correctIdx = opts.findIndex((o, i) => JSON.stringify(i) === correct || JSON.stringify(o) === correct) || 0;
       if (correctIdx < 0) correctIdx = typeof q.correct === 'number' ? q.correct : 0;
+    } else if (q.type === 'theory' && q.correct != null) {
+      correctTxt = typeof q.correct === 'string' ? q.correct : String(q.correct);
     }
-    setForm({ title: q.title, type: q.type, body: q.body || '', options: opts, correctIndex: correctIdx });
+    setForm({ title: q.title, type: q.type, body: q.body || '', options: opts, correctIndex: correctIdx, correctText: correctTxt });
     setEditId(q.id);
     setShowForm(true);
   };
@@ -59,7 +69,7 @@ export default function QuestionsPage() {
         type: form.type,
         body: form.body || null,
         options: form.type === 'mcq' ? form.options.filter(o => o.trim()) : null,
-        correct: form.type === 'mcq' ? form.correctIndex : null,
+        correct: form.type === 'mcq' ? form.correctIndex : (form.correctText || null),
       };
 
       if (editId) {
@@ -98,6 +108,108 @@ export default function QuestionsPage() {
     }
   };
 
+  const parseCSV = (text) => {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines.length < 2) throw new Error('CSV must contain a header row and at least one data row');
+
+    const parseLine = (line) => {
+      const result = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(cur.trim());
+          cur = '';
+        } else {
+          cur += char;
+        }
+      }
+      result.push(cur.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]).map(h => h.toLowerCase());
+    const titleIdx = headers.indexOf('title');
+    const typeIdx = headers.indexOf('type');
+    const bodyIdx = headers.indexOf('body');
+    const optionsIdx = headers.indexOf('options');
+    const correctIdx = headers.indexOf('correct');
+
+    if (titleIdx === -1 || typeIdx === -1) {
+      throw new Error('CSV header must contain at least "title" and "type" columns');
+    }
+
+    const parsed = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cells = parseLine(lines[i]);
+      if (cells.length < 2) continue;
+      
+      const title = cells[titleIdx];
+      const type = cells[typeIdx]?.toLowerCase();
+      const body = bodyIdx !== -1 ? cells[bodyIdx] : '';
+      
+      if (!title || !type) continue;
+      
+      let options = null;
+      let correct = null;
+      
+      if (type === 'mcq') {
+        const rawOptions = optionsIdx !== -1 ? cells[optionsIdx] : '';
+        options = rawOptions.split(/[;|]/).map(o => o.trim()).filter(Boolean);
+        const rawCorrect = correctIdx !== -1 ? cells[correctIdx] : '0';
+        correct = parseInt(rawCorrect, 10);
+        if (isNaN(correct)) correct = 0;
+      } else {
+        correct = correctIdx !== -1 ? cells[correctIdx] : '';
+      }
+
+      parsed.push({ title, type, body, options, correct });
+    }
+    return parsed;
+  };
+
+  const handleImport = async (e) => {
+    e.preventDefault();
+    setImportError('');
+    setImporting(true);
+
+    try {
+      let questionsList = [];
+      if (importFile) {
+        const fileText = await importFile.text();
+        if (importFile.name.endsWith('.json')) {
+          questionsList = JSON.parse(fileText);
+        } else if (importFile.name.endsWith('.csv')) {
+          questionsList = parseCSV(fileText);
+        } else {
+          throw new Error('Unsupported file format. Please upload .json or .csv');
+        }
+      } else if (importText.trim()) {
+        questionsList = JSON.parse(importText);
+      } else {
+        throw new Error('Please select a file or paste JSON questions');
+      }
+
+      if (!Array.isArray(questionsList)) {
+        throw new Error('Import data must be a list (array) of questions');
+      }
+
+      const res = await api.post('/questions/bulk', { questions: questionsList });
+      setShowImport(false);
+      setImportText('');
+      setImportFile(null);
+      setImportSuccess(`✅ Successfully imported ${res.data.count} question${res.data.count !== 1 ? 's' : ''}.`);
+      setTimeout(() => setImportSuccess(''), 5000);
+      loadQuestions();
+    } catch (err) {
+      setImportError(err.response?.data?.error || err.message || 'Import failed');
+    }
+    setImporting(false);
+  };
+
   return (
     <RequireAuth>
     <DashboardLayout>
@@ -107,9 +219,18 @@ export default function QuestionsPage() {
           <p>Create and manage exam questions</p>
         </div>
         {isStaff && (
-          <button onClick={openCreate}>+ New Question</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => setShowImport(true)} className="secondary">↑ Import Questions</button>
+            <button type="button" onClick={openCreate}>+ New Question</button>
+          </div>
         )}
       </div>
+
+      {importSuccess && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 'var(--radius-sm)', padding: '12px 16px', marginBottom: 16, color: '#047857', fontWeight: 500 }}>
+          {importSuccess}
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       {showForm && (
@@ -134,6 +255,18 @@ export default function QuestionsPage() {
                 <label>Description / Body</label>
                 <textarea value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Question details (optional)" />
               </div>
+
+              {form.type === 'theory' && (
+                <div className="form-row">
+                  <label>Expected Answer / Rubric</label>
+                  <textarea
+                    value={form.correctText}
+                    onChange={e => setForm({ ...form, correctText: e.target.value })}
+                    placeholder="Describe the expected correct answer or keyword list to assist grading"
+                    rows={3}
+                  />
+                </div>
+              )}
 
               {form.type === 'mcq' && (
                 <div className="form-row">
@@ -177,6 +310,74 @@ export default function QuestionsPage() {
               <div className="modal-actions">
                 <button type="button" className="secondary" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</button>
                 <button type="submit" disabled={saving}>{saving ? 'Saving…' : (editId ? 'Update' : 'Create')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImport && (
+        <div className="modal-overlay" onClick={() => { setShowImport(false); setImportError(''); setImportFile(null); setImportText(''); }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2>Import Questions</h2>
+            <p style={{ color: 'var(--gray-500)', fontSize: 13, marginBottom: 16 }}>
+              Upload a <strong>.json</strong> or <strong>.csv</strong> file, or paste raw JSON questions list below.
+            </p>
+            <form onSubmit={handleImport}>
+              <div className="form-row">
+                <label>Select JSON/CSV File</label>
+                <input
+                  type="file"
+                  accept=".json,.csv"
+                  onChange={e => {
+                    const file = e.target.files[0];
+                    setImportFile(file);
+                  }}
+                  style={{ padding: '8px 0' }}
+                />
+              </div>
+
+              <div style={{ textAlign: 'center', margin: '12px 0', color: 'var(--gray-400)', fontSize: 12 }}>
+                — OR —
+              </div>
+
+              <div className="form-row">
+                <label>Paste Raw JSON</label>
+                <textarea
+                  value={importText}
+                  onChange={e => setImportText(e.target.value)}
+                  placeholder={`[
+  {
+    "title": "Who is the originator of Python?",
+    "type": "theory",
+    "correct": "Guido van Rossum"
+  }
+]`}
+                  rows={8}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }}
+                  disabled={!!importFile}
+                />
+              </div>
+
+              {importError && <p className="error">{importError}</p>}
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setShowImport(false);
+                    setImportError('');
+                    setImportFile(null);
+                    setImportText('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-success" disabled={importing}>
+                  {importing ? 'Importing…' : 'Import'}
+                </button>
               </div>
             </form>
           </div>

@@ -45,7 +45,7 @@ router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, ne
     const { title, type, body, options, correct } = req.body;
     if (!title || !type) return res.status(400).json({ error: 'Title and type are required' });
     if (!['mcq', 'theory'].includes(type)) return res.status(400).json({ error: 'Type must be mcq or theory' });
-    if (type === 'mcq' && (!options || !correct)) {
+    if (type === 'mcq' && (!options || correct === undefined || correct === null)) {
       return res.status(400).json({ error: 'MCQ questions require options and correct answer' });
     }
     const approvalStatus = req.user.role === 'ADMIN' ? 'PENDING' : 'APPROVED';
@@ -55,6 +55,47 @@ router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, ne
     res.status(201).json(question);
   } catch (err) {
     next(err);
+  }
+});
+
+// Bulk create questions (OWNER/ADMIN only)
+router.post('/bulk', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { questions } = req.body;
+    if (!Array.isArray(questions)) {
+      return res.status(400).json({ error: 'questions must be an array' });
+    }
+
+    const approvalStatus = req.user.role === 'ADMIN' ? 'PENDING' : 'APPROVED';
+
+    const dataToInsert = questions.map((q) => {
+      if (!q.title || !q.type) {
+        throw new Error('Title and type are required for all questions');
+      }
+      if (!['mcq', 'theory'].includes(q.type)) {
+        throw new Error('Type must be mcq or theory');
+      }
+      if (q.type === 'mcq' && (!q.options || q.correct === undefined || q.correct === null)) {
+        throw new Error('MCQ questions require options and a correct answer index');
+      }
+      return {
+        title: q.title,
+        type: q.type,
+        body: q.body || null,
+        options: q.type === 'mcq' ? (Array.isArray(q.options) ? q.options : q.options) : null,
+        correct: q.type === 'mcq' ? parseInt(q.correct, 10) : (q.correct ? String(q.correct) : null),
+        createdBy: req.user.sub,
+        approvalStatus,
+      };
+    });
+
+    const created = await prisma.question.createMany({
+      data: dataToInsert,
+    });
+
+    res.status(201).json({ ok: true, count: created.count });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
