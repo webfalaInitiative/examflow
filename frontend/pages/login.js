@@ -11,14 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
   const [notice, setNotice] = useState('');
-
-  const demoAccounts = [
-    { label: 'Superadmin (OWNER)', email: 'owner@example.com', password: 'ChangeMe123!' },
-    { label: 'Admin', email: 'admin@example.com', password: 'AdminPass123!' },
-    { label: 'Student', email: 'student@example.com', password: 'Student123!' },
-  ];
 
   useEffect(() => {
     if (!loading && user) router.replace('/');
@@ -40,18 +33,6 @@ export default function Login() {
     setSubmitting(true);
     try {
       await login(email, password);
-      router.push('/');
-    } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-      setSubmitting(false);
-    }
-  };
-
-  const loginDemo = async (eMail, pwd) => {
-    setError('');
-    setSubmitting(true);
-    try {
-      await login(eMail, pwd);
       router.push('/');
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');
@@ -96,33 +77,6 @@ export default function Login() {
         <div className="center-small">
           <span className="helper">Need help?</span>
           <a className="small-link" href="#">Contact support</a>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          <button type="button" className="demo-toggle" onClick={() => setDemoOpen(!demoOpen)} aria-expanded={demoOpen} aria-controls="demo-panel">
-            {demoOpen ? 'Hide demo accounts' : 'Show demo accounts'}
-          </button>
-          {demoOpen && (
-            <div id="demo-panel" className="demo-panel" role="region" aria-label="Demo accounts">
-              <p className="helper">Use these demo accounts for quick testing.</p>
-              {demoAccounts.map((a) => (
-                <div key={a.email} className="demo-account">
-                  <div>
-                    <strong>{a.label}</strong>
-                    <div className="helper">{a.email}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" className="secondary btn-sm" onClick={() => { setEmail(a.email); setPassword(a.password); }}>
-                      Autofill
-                    </button>
-                    <button type="button" className="btn-sm" onClick={() => loginDemo(a.email, a.password)} disabled={submitting}>
-                      Sign in
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>
