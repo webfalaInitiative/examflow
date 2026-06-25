@@ -1,3 +1,4 @@
+// Login page — no demo accounts, production-ready
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
