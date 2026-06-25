@@ -173,7 +173,7 @@ export default function ExamsPage() {
   return (
     <RequireAuth>
     <DashboardLayout>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header flex-header">
         <div>
           <h1>{isAdmin ? 'Exam Folders' : 'My Exams'}</h1>
           <p>{isAdmin ? 'Create grouped question sets and assign them to specific students.' : 'All exams assigned to you.'}</p>

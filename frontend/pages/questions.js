@@ -213,7 +213,7 @@ export default function QuestionsPage() {
   return (
     <RequireAuth>
     <DashboardLayout>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="page-header flex-header">
         <div>
           <h1>Questions</h1>
           <p>Create and manage exam questions</p>
