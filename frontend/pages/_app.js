@@ -7,17 +7,23 @@ export default function App({ Component, pageProps }) {
   useEffect(() => {
     const handler = (event) => {
       const msg = event?.reason?.message || event?.message || '';
+      const filename = event?.filename || '';
       if (
         msg.includes('MetaMask') ||
-        msg.includes('inpage.js') ||
-        msg.includes('ethereum')
+        msg.includes('inpage') ||
+        msg.includes('ethereum') ||
+        filename.includes('nkbihfbeogaeaoehlefnkodbefgpgknn')
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
     };
     window.addEventListener('unhandledrejection', handler);
-    return () => window.removeEventListener('unhandledrejection', handler);
+    window.addEventListener('error', handler);
+    return () => {
+      window.removeEventListener('unhandledrejection', handler);
+      window.removeEventListener('error', handler);
+    };
   }, []);
 
   return (
