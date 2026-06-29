@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import prisma from '../config/prismaClient.js';
 
 export function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
@@ -17,9 +18,20 @@ export function verifyToken(req, res, next) {
 }
 
 export function requireRole(...allowed) {
-  return (req, res, next) => {
-    const role = req.user?.role;
-    if (!role || !allowed.includes(role)) return res.status(403).json({ error: 'Forbidden' });
-    next();
+  return async (req, res, next) => {
+    // Prefer authoritative role from database so role changes take effect immediately
+    try {
+      const userId = req.user?.sub;
+      let role = req.user?.role;
+      if (userId) {
+        const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+        if (dbUser && dbUser.role) role = dbUser.role;
+      }
+
+      if (!role || !allowed.includes(role)) return res.status(403).json({ error: 'Forbidden' });
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }

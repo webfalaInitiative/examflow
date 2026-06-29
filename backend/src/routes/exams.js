@@ -32,16 +32,29 @@ router.get('/', verifyToken, async (req, res, next) => {
         },
         orderBy: { createdAt: 'desc' }
       });
+    } else if (role === 'ADMIN') {
+      // ADMIN sees only exams they created
+      exams = await prisma.exam.findMany({
+        where: { createdBy: sub },
+        include: {
+          creator: {
+            select: { name: true, email: true }
+          },
+          _count: {
+            select: { questions: true, assignments: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
     } else {
-      // ADMIN/OWNER sees all or just theirs? 
-      // For now, let's show all for ADMINs too, but filter by creator if needed.
+      // OWNER sees all exams. Include counts so frontend can show assigned numbers.
       exams = await prisma.exam.findMany({
         include: {
           creator: {
             select: { name: true, email: true }
           },
           _count: {
-            select: { questions: true }
+            select: { questions: true, assignments: true }
           }
         },
         orderBy: { createdAt: 'desc' }

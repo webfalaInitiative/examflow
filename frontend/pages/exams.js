@@ -202,7 +202,7 @@ export default function ExamsPage() {
                   <div className="exam-stats">
                     <span>{exam._count?.questions ?? 0} Questions</span>
                     {exam.duration && <span>• {exam.duration} Min</span>}
-                    {isAdmin && <span>• {exam.assignments?.length ?? 0} Assigned</span>}
+                    {isAdmin && <span>• {(exam._count?.assignments ?? exam.assignments?.length) ?? 0} Assigned</span>}
                     {!isAdmin && exam.resultsPublished === false && (
                       <span> • <span className="badge orange" style={{ fontSize: '0.75rem' }}>Results when published</span></span>
                     )}

@@ -94,11 +94,10 @@ img { display: block; max-width: 100%; }
   display: flex; align-items: center; justify-content: center;
   padding: 32px;
   background-color: var(--primary-50);
-  background-image:
-    url('/images/auth-bg.jpg'),
-    radial-gradient(circle at 30% 30%, rgba(29,85,234,.07), transparent 40%),
-    linear-gradient(135deg, rgba(29,85,234,.04), rgba(51,115,245,.02));
-  background-repeat: no-repeat; background-position: center; background-size: cover;
+  /* Removed heavy auth background image to use solid light-blue brand color */
+  background-image: radial-gradient(circle at 30% 30%, rgba(29,85,234,.04), transparent 40%),
+    linear-gradient(135deg, rgba(29,85,234,.02), rgba(51,115,245,.01));
+  background-repeat: no-repeat; background-position: center; background-size: auto;
 }
 .auth-container::before {
   content: ''; position: absolute; left: -15%; top: -15%;
