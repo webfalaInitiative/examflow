@@ -182,6 +182,99 @@ router.post('/', verifyToken, requireRole('STUDENT'), async (req, res, next) => 
   }
 });
 
+// Submit all answers at once (bulk)
+router.post('/bulk', verifyToken, requireRole('STUDENT'), async (req, res, next) => {
+  try {
+    const { examId, answers } = req.body;
+    if (!examId || !Array.isArray(answers)) {
+      return res.status(400).json({ error: 'examId and answers array are required' });
+    }
+
+    const eId = parseInt(examId);
+
+    const exam = await prisma.exam.findUnique({
+      where: { id: eId },
+      include: { questions: { include: { question: true } } },
+    });
+
+    if (!exam) return res.status(404).json({ error: 'Exam not found' });
+
+    const assigned = await prisma.examAssignment.findUnique({
+      where: { examId_userId: { examId: eId, userId: req.user.sub } },
+    });
+    if (!assigned) return res.status(403).json({ error: 'Not assigned to this exam' });
+    if (assigned.examSubmittedAt) {
+      return res.status(409).json({ error: 'Exam already submitted' });
+    }
+
+    // Clean up any existing submissions for this exam by this user
+    await prisma.submission.deleteMany({
+      where: {
+        userId: req.user.sub,
+        examId: eId,
+      },
+    });
+
+    const submissionsData = [];
+    for (const eq of exam.questions) {
+      const question = eq.question;
+      if (!question) continue;
+
+      const studentAnsObj = answers.find(a => parseInt(a.questionId) === question.id);
+      const answer = studentAnsObj ? studentAnsObj.answer : '';
+
+      let score = null;
+      let graded = false;
+
+      if (question.type === 'mcq' && question.correct != null) {
+        const correctAnswer = String(question.correct);
+        const studentAnswer = String(answer);
+        score = (answer !== undefined && answer !== '') && (correctAnswer === studentAnswer) ? 1.0 : 0.0;
+        graded = true;
+      }
+
+      submissionsData.push({
+        userId: req.user.sub,
+        questionId: question.id,
+        examId: eId,
+        answer: typeof answer === 'object' ? answer : answer,
+        score,
+        graded,
+      });
+    }
+
+    const createdSubmissions = await prisma.$transaction(
+      submissionsData.map(data =>
+        prisma.submission.create({
+          data,
+          include: {
+            question: { select: { id: true, title: true, type: true } },
+            exam: { select: { id: true, title: true, resultsPublished: true } },
+          },
+        })
+      )
+    );
+
+    // Mark exam as submitted & trigger email notification
+    await notifyExamSubmittedIfComplete(req.user.sub, eId);
+
+    let responseSubmissions = createdSubmissions;
+    if (!exam.resultsPublished) {
+      responseSubmissions = createdSubmissions.map(sub => ({
+        ...sub,
+        score: null,
+        graded: false,
+        resultsPending: true,
+      }));
+    }
+
+    res.status(201).json({ submissions: responseSubmissions });
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
+});
+
 // Grade a submission (OWNER/ADMIN only) — theory marks are 0–1 (same as MCQ); display ×100 in UI
 router.patch('/:id/grade', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {

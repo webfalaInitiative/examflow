@@ -18,6 +18,7 @@ export default function ExamPage() {
   const [submitting, setSubmitting] = useState({});
   const [results, setResults] = useState({});
   const [error, setError] = useState('');
+  const [submittingExam, setSubmittingExam] = useState(false);
 
   const [step, setStep] = useState(0);
   const [examComplete, setExamComplete] = useState(false);
@@ -126,6 +127,28 @@ export default function ExamPage() {
     return () => clearTimeout(t);
   }, [showCongrats, examComplete, isTimeUp, router]);
 
+  useEffect(() => {
+    if (isTimeUp && isExamMode && !examComplete) {
+      const autoSubmit = async () => {
+        try {
+          const formattedAnswers = orderedQuestions.map((q) => ({
+            questionId: q.id,
+            answer: answers[q.id] !== undefined ? answers[q.id] : '',
+          }));
+          const res = await api.post('/submissions/bulk', {
+            examId: parseInt(examId, 10),
+            answers: formattedAnswers,
+          });
+          setSubmissions(res.data.submissions);
+          setExamComplete(true);
+        } catch (err) {
+          console.error('Auto-submission failed:', err);
+        }
+      };
+      autoSubmit();
+    }
+  }, [isTimeUp, isExamMode, examComplete, orderedQuestions, answers, examId]);
+
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -134,6 +157,13 @@ export default function ExamPage() {
 
   const answeredIds = new Set(submissions.map((s) => s.questionId));
   const available = questions.filter((q) => !answeredIds.has(q.id));
+
+  const unansweredCount = useMemo(() => {
+    if (isExamMode) {
+      return orderedQuestions.filter((q) => answers[q.id] === undefined || answers[q.id] === '').length;
+    }
+    return available.length;
+  }, [isExamMode, orderedQuestions, answers, available.length]);
 
   const submitAnswer = async (questionId) => {
     if (isTimeUp) return;
@@ -173,6 +203,43 @@ export default function ExamPage() {
       alert(err.response?.data?.error || 'Submission failed');
     }
     setSubmitting((prev) => ({ ...prev, [questionId]: false }));
+  };
+
+  const submitExam = async () => {
+    if (isTimeUp) return;
+
+    const unansweredQuestions = orderedQuestions.filter(
+      (q) => answers[q.id] === undefined || answers[q.id] === ''
+    );
+    const unansweredCountVal = unansweredQuestions.length;
+
+    let confirmMessage = 'Are you sure you want to submit the exam?';
+    if (unansweredCountVal > 0) {
+      confirmMessage = `You have ${unansweredCountVal} unanswered question(s). Are you sure you want to submit?`;
+    }
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setSubmittingExam(true);
+    try {
+      const formattedAnswers = orderedQuestions.map((q) => ({
+        questionId: q.id,
+        answer: answers[q.id] !== undefined ? answers[q.id] : '',
+      }));
+
+      const res = await api.post('/submissions/bulk', {
+        examId: parseInt(examId, 10),
+        answers: formattedAnswers,
+      });
+
+      setSubmissions(res.data.submissions);
+      setExamComplete(true);
+      setShowCongrats(true);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit exam');
+    } finally {
+      setSubmittingExam(false);
+    }
   };
 
   const goPrev = useCallback(() => {
@@ -234,7 +301,7 @@ export default function ExamPage() {
               : `${available.length} question${available.length !== 1 ? 's' : ''} available`}
           </p>
           <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
-            {exam && <span className="stat-pill">📋 {available.length} unanswered</span>}
+            {exam && <span className="stat-pill">📋 {unansweredCount} unanswered</span>}
             {exam && exam.duration && <span className="stat-pill">⏳ {exam.duration} mins total</span>}
             {isExamMode && orderedQuestions.length > 0 && (
               <span className="stat-pill">
@@ -272,7 +339,7 @@ export default function ExamPage() {
           <div className="time-up-overlay">
             <div className="time-up-card">
               <h2>⏰ Time is Up!</h2>
-              <p>You can no longer submit answers for this exam. Any submissions already made have been saved.</p>
+              <p>Time has expired. Your selected answers have been automatically submitted.</p>
               <a href="/" className="btn-primary">
                 Back to Dashboard
               </a>
@@ -299,14 +366,25 @@ export default function ExamPage() {
             <button type="button" className="secondary btn-sm" onClick={goPrev} disabled={step <= 0 || examComplete}>
               ← Previous
             </button>
-            <button
-              type="button"
-              className="secondary btn-sm"
-              onClick={goNext}
-              disabled={step >= orderedQuestions.length - 1 || examComplete}
-            >
-              Next →
-            </button>
+            {step === orderedQuestions.length - 1 ? (
+              <button
+                type="button"
+                className="btn-sm btn-success submit-exam-btn"
+                onClick={submitExam}
+                disabled={submittingExam || examComplete}
+              >
+                {submittingExam ? 'Submitting Exam…' : 'Submit Exam'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary btn-sm"
+                onClick={goNext}
+                disabled={step >= orderedQuestions.length - 1 || examComplete}
+              >
+                Next →
+              </button>
+            )}
           </div>
         )}
 
@@ -323,6 +401,7 @@ export default function ExamPage() {
               submitAnswer={submitAnswer}
               isTimeUp={isTimeUp}
               examComplete={examComplete}
+              isExamMode={isExamMode}
             />
           ) : (
             !isExamMode &&
@@ -338,6 +417,7 @@ export default function ExamPage() {
                 submitAnswer={submitAnswer}
                 isTimeUp={isTimeUp}
                 examComplete={false}
+                isExamMode={isExamMode}
                 styleDelay={index * 0.05}
               />
             ))
@@ -472,6 +552,7 @@ function ExamQuestionCard({
   submitAnswer,
   isTimeUp,
   examComplete,
+  isExamMode = false,
   styleDelay = 0,
 }) {
   const opts = q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : [];
@@ -519,7 +600,7 @@ function ExamQuestionCard({
         </div>
       )}
 
-      {!isDone && (
+      {!isDone && !isExamMode && (
         <button
           className="submit-answer-btn"
           onClick={() => submitAnswer(q.id)}
