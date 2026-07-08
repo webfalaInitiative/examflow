@@ -190,32 +190,6 @@ function StudentDashboard({ user, submissions, questions }) {
           </div>
         </div>
       )}
-
-      {submissions.length > 0 && (
-        <div className="panel">
-          <div className="panel-header">
-            <h2>Recent Results</h2>
-            <a href="/my-results" className="small-link">View all →</a>
-          </div>
-          <div className="panel-body no-pad">
-            <table className="data-table">
-              <thead>
-                <tr><th>Question</th><th>Score</th><th>Status</th><th>Date</th></tr>
-              </thead>
-              <tbody>
-                {submissions.slice(0, 5).map(s => (
-                  <tr key={s.id}>
-                    <td>{s.question?.title || '—'}</td>
-                    <td>{s.score != null ? (s.score * 100).toFixed(0) + '%' : '—'}</td>
-                    <td><span className={`badge ${s.graded ? 'green' : 'orange'}`}>{s.graded ? 'Graded' : 'Pending'}</span></td>
-                    <td>{new Date(s.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </>
   );
 }
