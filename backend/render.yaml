@@ -9,8 +9,8 @@ services:
     name: examflow-backend
     runtime: node
     plan: free
-    buildCommand: npm install && npx prisma generate
-    startCommand: npx prisma migrate deploy && npm start
+    buildCommand: npm install --production=false && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
