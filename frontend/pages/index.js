@@ -3,6 +3,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import Link from 'next/link';
 
 export default function Dashboard() {
   return (
@@ -82,7 +83,7 @@ function AdminDashboard({ stats, recentSubmissions }) {
       <div className="panel">
         <div className="panel-header">
           <h2>Recent Submissions</h2>
-          <a href="/submissions" className="small-link">View all →</a>
+          <Link href="/submissions" className="small-link">View all →</Link>
         </div>
         <div className="panel-body no-pad">
           {recentSubmissions.length === 0 ? (
@@ -168,7 +169,7 @@ function StudentDashboard({ user, submissions, questions }) {
         <div className="panel">
           <div className="panel-header">
             <h2>Your Exam Folders</h2>
-            <a href="/exams" className="small-link">View all →</a>
+            <Link href="/exams" className="small-link">View all →</Link>
           </div>
           <div className="panel-body no-pad">
             <table className="data-table">
@@ -181,7 +182,7 @@ function StudentDashboard({ user, submissions, questions }) {
                     <td><strong>{exam.title}</strong></td>
                     <td>{exam._count?.questions ?? 0}</td>
                     <td>
-                      <a href={`/exam?examId=${exam.id}`} className="btn-sm btn-primary">Start</a>
+                      <Link href={`/exam?examId=${exam.id}`} className="btn-sm btn-primary">Start</Link>
                     </td>
                   </tr>
                 ))}

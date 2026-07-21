@@ -27,9 +27,18 @@ export function AuthProvider({ children }) {
       api.get('/users/me').then((res) => {
         setUser(res.data);
         setLoading(false);
-      }).catch(() => {
-        localStorage.removeItem('token');
-        setLoading(false);
+      }).catch((err) => {
+        // Only clear token on a genuine 401 (token is truly invalid/expired)
+        // For network errors or server issues (e.g. Render cold-start), keep the
+        // token and use the JWT payload so the user isn't kicked out needlessly
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          setLoading(false);
+        } else {
+          // Fallback: use the JWT payload directly so the session survives
+          setUser({ id: payload.sub, role: payload.role });
+          setLoading(false);
+        }
       });
     } catch {
       localStorage.removeItem('token');

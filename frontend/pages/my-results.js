@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
@@ -174,7 +175,7 @@ export default function MyResultsPage() {
               <div className="empty-state">
                 <div className="empty-icon">📁</div>
                 <p>No exams assigned or submitted yet.</p>
-                <a href="/exams" className="small-link" style={{ marginTop: 12 }}>View Assigned Exams →</a>
+                <Link href="/exams" className="small-link" style={{ marginTop: 12 }}>View Assigned Exams →</Link>
               </div>
             ) : (
               <table className="data-table">

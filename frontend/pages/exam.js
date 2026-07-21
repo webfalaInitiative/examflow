@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
@@ -315,9 +316,9 @@ export default function ExamPage() {
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-body">
               <p style={{ marginBottom: 12 }}>You have already submitted all answers for this exam.</p>
-              <a href="/" className="btn-primary">
+              <Link href="/" className="btn-primary">
                 Back to Dashboard
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -340,9 +341,9 @@ export default function ExamPage() {
             <div className="time-up-card">
               <h2>⏰ Time is Up!</h2>
               <p>Time has expired. Your selected answers have been automatically submitted.</p>
-              <a href="/" className="btn-primary">
+              <Link href="/" className="btn-primary">
                 Back to Dashboard
-              </a>
+              </Link>
             </div>
           </div>
         )}
@@ -353,9 +354,9 @@ export default function ExamPage() {
               <div className="empty-state">
                 <div className="empty-icon">🎉</div>
                 <p>You&apos;ve completed all available questions! Check your results.</p>
-                <a href="/my-results" className="small-link" style={{ marginTop: 12 }}>
+                <Link href="/my-results" className="small-link" style={{ marginTop: 12 }}>
                   View Results →
-                </a>
+                </Link>
               </div>
             </div>
           </div>

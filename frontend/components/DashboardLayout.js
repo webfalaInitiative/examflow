@@ -1,6 +1,7 @@
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import WebfalaLogo from './WebfalaLogo';
 
 export default function DashboardLayout({ children }) {
@@ -67,7 +68,7 @@ export default function DashboardLayout({ children }) {
 
         <nav className="sidebar-nav">
           {links.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className={`sidebar-link ${currentPath === link.href ? 'active' : ''}`}
@@ -75,7 +76,7 @@ export default function DashboardLayout({ children }) {
             >
               <span className="sidebar-icon">{link.icon}</span>
               <span>{link.label}</span>
-            </a>
+            </Link>
           ))}
         </nav>
 

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import DashboardLayout from '../../../components/DashboardLayout';
 import RequireAuth from '../../../components/RequireAuth';
 import { useAuth } from '../../../context/AuthContext';
@@ -112,12 +113,12 @@ export default function ExamGradingPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a href="/submissions" className="btn-sm btn-outline">
+            <Link href="/submissions" className="btn-sm btn-outline">
               Open submissions list
-            </a>
-            <a href="/exams" className="btn-sm btn-outline">
+            </Link>
+            <Link href="/exams" className="btn-sm btn-outline">
               ← Exam folders
-            </a>
+            </Link>
             {exam && !exam.resultsPublished && (
               <button type="button" className="btn-primary" disabled={publishing} onClick={publish}>
                 {publishing ? 'Publishing…' : 'Publish results & notify students'}
