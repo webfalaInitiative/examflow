@@ -82,9 +82,11 @@ export default function DashboardLayout({ children }) {
 
         <div className="sidebar-footer">
           <div className="user-badge">
-            <div className="user-avatar">{(user.name || user.email)[0].toUpperCase()}</div>
+            <div className="user-avatar">
+              {((user.name || user.email || 'U').charAt(0) || 'U').toUpperCase()}
+            </div>
             <div className="user-info">
-              <span className="user-name">{user.name || 'User'}</span>
+              <span className="user-name">{user.name || user.email || 'User'}</span>
               <span className="user-role">{roleLabel}</span>
             </div>
           </div>

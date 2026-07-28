@@ -215,9 +215,8 @@ export default function ExamGradingPage() {
                   </tbody>
                 </table>
                 <p className="helper" style={{ padding: 12 }}>
-                  Final uses question weights: (MCQ% × number of MCQs + theory% × theory parts) ÷ total parts. For exams with <strong>no theory questions</strong>,
-                  a saved theory mark counts as <strong>one</strong> part alongside MCQs. Theory % uses your scoreboard input when set; otherwise averaged grades from
-                  theory submissions.
+                  Final averages the two scores equally: MCQ % and theory % are both weighted as 100%. For exams with <strong>no theory questions</strong>,
+                  an entered theory mark averages with MCQ. If an exam has no MCQ questions, final equals the theory score.
                 </p>
               </div>
             </div>

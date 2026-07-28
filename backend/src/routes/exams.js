@@ -164,24 +164,15 @@ router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async 
 
         let finalPercent = null;
         if (gradingComplete) {
-          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : 0;
-          let thP = 0;
-          let theoryWeight = 0;
-          if (nTheory > 0) {
-            theoryWeight = nTheory;
-            thP =
-              manual != null
-                ? manual
-                : theoryGradedCount === nTheory
-                  ? (theoryPoints / nTheory) * 100
-                  : 0;
-          } else if (nMcq > 0 && manual != null) {
-            theoryWeight = 1;
-            thP = manual;
-          }
-          const totalW = nMcq + theoryWeight;
-          if (totalW > 0) {
-            finalPercent = (mcqP * nMcq + thP * theoryWeight) / totalW;
+          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+          const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
+
+          if (mcqP != null && thP != null) {
+            finalPercent = (mcqP + thP) / 2;
+          } else if (mcqP != null) {
+            finalPercent = mcqP;
+          } else if (thP != null) {
+            finalPercent = thP;
           }
         }
 
@@ -394,24 +385,15 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
 
         let finalPercent = null;
         if (gradingComplete) {
-          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : 0;
-          let thP = 0;
-          let theoryWeight = 0;
-          if (nTheory > 0) {
-            theoryWeight = nTheory;
-            thP =
-              manual != null
-                ? manual
-                : theoryGradedCount === nTheory
-                  ? (theoryPoints / nTheory) * 100
-                  : 0;
-          } else if (nMcq > 0 && manual != null) {
-            theoryWeight = 1;
-            thP = manual;
-          }
-          const totalW = nMcq + theoryWeight;
-          if (totalW > 0) {
-            finalPercent = (mcqP * nMcq + thP * theoryWeight) / totalW;
+          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+          const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
+
+          if (mcqP != null && thP != null) {
+            finalPercent = (mcqP + thP) / 2;
+          } else if (mcqP != null) {
+            finalPercent = mcqP;
+          } else if (thP != null) {
+            finalPercent = thP;
           }
         }
 

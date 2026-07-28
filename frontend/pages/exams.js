@@ -81,7 +81,8 @@ export default function ExamsPage() {
       setExamForm({ title: '', description: '', duration: '' });
       setCurrentExam(null);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save exam');
+      const message = err.response?.data?.error || err.message || 'Failed to save exam';
+      setError(message);
     }
     setSaving(false);
   };
