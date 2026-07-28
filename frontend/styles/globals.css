@@ -206,6 +206,39 @@ button:hover:not([disabled]) { filter: brightness(1.05); transform: translateY(-
 button:active:not([disabled]) { transform: translateY(0); }
 button[disabled] { opacity: .55; cursor: not-allowed; }
 
+.btn-primary, .btn-blue {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-500));
+  color: #ffffff !important; padding: 10px 18px; border-radius: var(--radius-sm);
+  border: none; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-decoration: none !important;
+  box-shadow: 0 1px 3px rgba(29,85,234,.2); transition: var(--transition);
+}
+.btn-primary:hover, .btn-blue:hover {
+  filter: brightness(1.05); transform: translateY(-1px); box-shadow: var(--shadow-md); color: #ffffff !important;
+}
+.btn-primary:active, .btn-blue:active { transform: translateY(0); }
+
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: #ffffff; border: 1px solid var(--gray-300); color: var(--gray-700) !important;
+  padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  cursor: pointer; text-decoration: none !important; transition: var(--transition);
+}
+.btn-outline:hover { background: var(--gray-50); border-color: var(--gray-400); color: var(--gray-900) !important; }
+
+.btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--error-500); color: #ffffff !important; border: none;
+  padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none !important; transition: var(--transition);
+}
+.btn-danger:hover { background: var(--error-700); }
+
+.btn-sm {
+  padding: 6px 12px !important; font-size: 13px !important;
+}
+
 .secondary {
   background: transparent; border: 1px solid var(--gray-200); color: var(--gray-700);
   box-shadow: var(--shadow-xs);

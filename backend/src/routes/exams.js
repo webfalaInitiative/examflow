@@ -519,7 +519,7 @@ router.delete('/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, re
 
 // --- Question Management in Exam ---
 
-// Add questions to exam
+// Add/update questions in exam
 router.post('/:id/questions', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
@@ -527,13 +527,21 @@ router.post('/:id/questions', verifyToken, requireRole('OWNER', 'ADMIN'), async 
 
     if (!Array.isArray(questionIds)) return res.status(400).json({ error: 'questionIds must be an array' });
 
-    // Create many ExamQuestion entries
+    // Delete any exam questions that are no longer selected
+    await prisma.examQuestion.deleteMany({
+      where: {
+        examId,
+        questionId: { notIn: questionIds },
+      },
+    });
+
+    // Upsert remaining selected questions
     const operations = questionIds.map((qId, index) => {
       return prisma.examQuestion.upsert({
         where: {
           examId_questionId: { examId, questionId: qId }
         },
-        update: {},
+        update: { sortOrder: index },
         create: {
           examId,
           questionId: qId,
@@ -611,6 +619,14 @@ router.post('/:id/assign', verifyToken, requireRole('OWNER', 'ADMIN'), async (re
     const { userIds } = req.body; // Array of student IDs
 
     if (!Array.isArray(userIds)) return res.status(400).json({ error: 'userIds must be an array' });
+
+    // Delete any assignments that are no longer selected
+    await prisma.examAssignment.deleteMany({
+      where: {
+        examId,
+        userId: { notIn: userIds },
+      },
+    });
 
     const operations = userIds.map(uId => {
       return prisma.examAssignment.upsert({

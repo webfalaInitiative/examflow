@@ -38,7 +38,7 @@ export default function DashboardLayout({ children }) {
     { href: '/', label: 'Dashboard', icon: '📊' },
     { href: '/exams', label: 'Exam Folders', icon: '📁' },
     { href: '/questions', label: 'Questions', icon: '📝' },
-    { href: '/submissions', label: 'Submissions', icon: '📋' },
+    { href: '/grading', label: 'Grading / Publish', icon: '📊' },
     { href: '/users', label: 'Users', icon: '👥' },
     ...(user.role === 'OWNER' ? [{ href: '/superadmin', label: 'Superadmin', icon: '🛡️' }] : []),
   ];
@@ -67,17 +67,22 @@ export default function DashboardLayout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`sidebar-link ${currentPath === link.href ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="sidebar-icon">{link.icon}</span>
-              <span>{link.label}</span>
-            </Link>
-          ))}
+          {links.map((link) => {
+            const isActive =
+              currentPath === link.href ||
+              (link.href === '/grading' && (currentPath === '/grading' || currentPath.includes('/grading')));
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`sidebar-link ${isActive ? 'active' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <span className="sidebar-icon">{link.icon}</span>
+                <span>{link.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">

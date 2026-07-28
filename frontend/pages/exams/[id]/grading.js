@@ -113,8 +113,8 @@ export default function ExamGradingPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/submissions" className="btn-sm btn-outline">
-              Open submissions list
+            <Link href="/grading" className="btn-sm btn-outline">
+              ← All Grading / Publish
             </Link>
             <Link href="/exams" className="btn-sm btn-outline">
               ← Exam folders

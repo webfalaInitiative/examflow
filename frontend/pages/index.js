@@ -83,7 +83,7 @@ function AdminDashboard({ stats, recentSubmissions }) {
       <div className="panel">
         <div className="panel-header">
           <h2>Recent Submissions</h2>
-          <Link href="/submissions" className="small-link">View all →</Link>
+          <Link href="/grading" className="small-link">Grading / Publish →</Link>
         </div>
         <div className="panel-body no-pad">
           {recentSubmissions.length === 0 ? (
