@@ -19,6 +19,9 @@ export default function CombineResultsPage() {
   const [report, setReport] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [error, setError] = useState('');
+  const [reportTitle, setReportTitle] = useState('Combined Assessment Report');
+  const [publishing, setPublishing] = useState(false);
+  const [publishedNotice, setPublishedNotice] = useState('');
 
   const isStaff = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
@@ -43,6 +46,37 @@ export default function CombineResultsPage() {
   const totalWeight = useMemo(() => {
     return items.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);
   }, [items]);
+
+  const publishCombinedReport = async () => {
+    if (!report || !report.folders || report.folders.length < 2) return;
+    setPublishing(true);
+    setPublishedNotice('');
+    setError('');
+
+    try {
+      const validItems = items.filter((i) => i.examId !== '' && !Number.isNaN(parseInt(i.examId)));
+      const itemsPayload = validItems.map((item) => {
+        const folder = report.folders.find((f) => String(f.id) === String(item.examId));
+        return {
+          examId: item.examId,
+          weight: item.weight,
+          title: folder ? folder.title : `Folder ${item.examId}`,
+        };
+      });
+
+      await api.post('/exams/combine-results/publish', {
+        title: reportTitle.trim() || 'Combined Assessment Report',
+        description: `Combined score report for ${validItems.length} exam folders`,
+        items: itemsPayload,
+      });
+
+      setPublishedNotice('✅ Combined report published successfully! Students can now view their combined result on their dashboard.');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to publish combined report.');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const updateItem = (index, field, value) => {
     setItems((prev) => {
@@ -259,13 +293,34 @@ export default function CombineResultsPage() {
           </div>
         </div>
 
+        {publishedNotice && (
+          <div className="alert alert-success" style={{ marginBottom: 20, background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
+            {publishedNotice}
+          </div>
+        )}
+
         {report && (
           <div className="panel">
             <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-              <h2>Combined Assessment Scoreboard ({report.rows.length} Students)</h2>
-              <button type="button" className="btn-sm btn-outline" onClick={exportCSV}>
-                📥 Export Report to CSV
-              </button>
+              <div>
+                <h2>Combined Assessment Scoreboard ({report.rows.length} Students)</h2>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                {user?.role === 'OWNER' && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{ background: '#10b981', borderColor: '#10b981', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={publishCombinedReport}
+                    disabled={publishing}
+                  >
+                    {publishing ? 'Publishing…' : '📢 Publish Combined Report to Students'}
+                  </button>
+                )}
+                <button type="button" className="btn-sm btn-outline" onClick={exportCSV}>
+                  📥 Export Report to CSV
+                </button>
+              </div>
             </div>
             <div className="panel-body no-pad">
               <table className="data-table">

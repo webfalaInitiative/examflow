@@ -19,6 +19,7 @@ model User {
   email     String   @unique
   password  String
   name      String?
+  avatarUrl String?
   role      RoleType @default(STUDENT)
   /// ACTIVE | PENDING | REJECTED — new students register as PENDING until Superadmin (OWNER) approves
   accountStatus String @default("ACTIVE")
@@ -29,6 +30,7 @@ model User {
   examAssignments  ExamAssignment[]
   createdExams     Exam[]           @relation("ExamCreator")
   moderationLogs   ModerationLog[]
+  combinedReports  CombinedResultReport[]
 }
 
 model Question {
@@ -123,4 +125,18 @@ model ModerationLog {
   createdAt  DateTime @default(now())
 
   actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+}
+
+model CombinedResultReport {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  items       Json     // Array of { examId, weight, title }
+  published   Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  createdBy   Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User @relation(fields: [createdBy], references: [id])
 }

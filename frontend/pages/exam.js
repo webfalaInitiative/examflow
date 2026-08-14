@@ -280,36 +280,54 @@ export default function ExamPage() {
           </div>
         )}
 
-        <div className="page-header">
-          <h1>{exam ? exam.title : 'Take Exam ✏️'}</h1>
-          {exam && exam.resultsPublished === false && (
-            <p
-              className="helper"
-              style={{
-                marginBottom: 8,
-                padding: '8px 12px',
-                background: 'var(--warning-50)',
-                borderRadius: 'var(--radius-sm)',
-              }}
-            >
-              Detailed scores for this folder stay hidden until an instructor publishes results. You will be
-              emailed when they are ready.
-            </p>
-          )}
-          <p>
-            {exam
-              ? exam.description || 'No description'
-              : `${available.length} question${available.length !== 1 ? 's' : ''} available`}
-          </p>
-          <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
-            {exam && <span className="stat-pill">📋 {unansweredCount} unanswered</span>}
-            {exam && exam.duration && <span className="stat-pill">⏳ {exam.duration} mins total</span>}
-            {isExamMode && orderedQuestions.length > 0 && (
-              <span className="stat-pill">
-                Question {Math.min(step + 1, orderedQuestions.length)} / {orderedQuestions.length}
-              </span>
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <h1>{exam ? exam.title : 'Take Exam ✏️'}</h1>
+            {exam && exam.resultsPublished === false && (
+              <p
+                className="helper"
+                style={{
+                  marginBottom: 8,
+                  padding: '8px 12px',
+                  background: 'var(--warning-50)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                Detailed scores for this folder stay hidden until an instructor publishes results. You will be
+                emailed when they are ready.
+              </p>
             )}
+            <p>
+              {exam
+                ? exam.description || 'No description'
+                : `${available.length} question${available.length !== 1 ? 's' : ''} available`}
+            </p>
+            <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
+              {exam && <span className="stat-pill">📋 {unansweredCount} unanswered</span>}
+              {exam && exam.duration && <span className="stat-pill">⏳ {exam.duration} mins total</span>}
+              {isExamMode && orderedQuestions.length > 0 && (
+                <span className="stat-pill">
+                  Question {Math.min(step + 1, orderedQuestions.length)} / {orderedQuestions.length}
+                </span>
+              )}
+            </div>
           </div>
+
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.7)', padding: '10px 16px', borderRadius: 12, border: '1px solid #e0e7ff' }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--accent, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 18, overflow: 'hidden' }}>
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Student Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  ((user.name || user.email || 'U').charAt(0) || 'U').toUpperCase()
+                )}
+              </div>
+              <div>
+                <span style={{ display: 'block', fontWeight: 700, fontSize: 14, color: '#1e1b4b' }}>{user.name || user.email}</span>
+                <span style={{ fontSize: 12, color: '#6366f1', fontWeight: 600 }}>Active Candidate</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {examComplete && isExamMode && !showCongrats && (

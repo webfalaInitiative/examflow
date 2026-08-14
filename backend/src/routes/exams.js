@@ -359,6 +359,135 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
   }
 });
 
+// Publish a Combined Result Report (OWNER only)
+router.post('/combine-results/publish', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+  try {
+    const { title, description, items } = req.body;
+    if (!title || !Array.isArray(items) || items.length < 2) {
+      return res.status(400).json({ error: 'Title and at least 2 exam items are required' });
+    }
+
+    const report = await prisma.combinedResultReport.create({
+      data: {
+        title,
+        description: description || null,
+        items,
+        published: true,
+        publishedAt: new Date(),
+        createdBy: req.user.sub,
+      },
+    });
+
+    res.status(201).json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get all published combined result reports
+router.get('/combine-results/published', verifyToken, async (req, res, next) => {
+  try {
+    const reports = await prisma.combinedResultReport.findMany({
+      where: { published: true },
+      orderBy: { createdAt: 'desc' },
+      include: { creator: { select: { name: true, email: true } } },
+    });
+    res.json(reports);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get logged-in student's combined score for published reports
+router.get('/combine-results/my-summary', verifyToken, async (req, res, next) => {
+  try {
+    const userId = req.user.sub;
+    const reports = await prisma.combinedResultReport.findMany({
+      where: { published: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const userObj = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true, avatarUrl: true },
+    });
+
+    const results = [];
+    for (const rep of reports) {
+      const items = rep.items;
+      if (!Array.isArray(items)) continue;
+
+      let totalCombined = 0;
+      let hasAnyScore = false;
+      let hasAllScores = true;
+      const folderBreakdown = [];
+
+      for (const item of items) {
+        const examId = parseInt(item.examId);
+        const weight = parseFloat(item.weight) || 0;
+        if (Number.isNaN(examId)) continue;
+
+        const data = await getExamScoreboardData(examId);
+        if (!data) continue;
+
+        const studentRow = data.rows.find((r) => r.user.id === userId);
+        const scorePercent = studentRow ? studentRow.finalPercent : null;
+        const weightedScore = scorePercent != null ? (scorePercent * weight) / 100 : null;
+
+        if (scorePercent != null) {
+          totalCombined += weightedScore;
+          hasAnyScore = true;
+        } else {
+          hasAllScores = false;
+        }
+
+        folderBreakdown.push({
+          examId,
+          examTitle: data.exam.title,
+          weight,
+          scorePercent,
+          weightedScore,
+          gradingComplete: studentRow ? studentRow.gradingComplete : false,
+        });
+      }
+
+      let gradeLetter = '—';
+      const finalVal = hasAnyScore ? Math.round(totalCombined * 10) / 10 : null;
+      if (finalVal != null) {
+        if (finalVal >= 80) gradeLetter = 'A';
+        else if (finalVal >= 70) gradeLetter = 'B';
+        else if (finalVal >= 60) gradeLetter = 'C';
+        else if (finalVal >= 50) gradeLetter = 'D';
+        else gradeLetter = 'F';
+      }
+
+      let status = 'Incomplete';
+      if (hasAllScores && finalVal != null) {
+        status = finalVal >= 50 ? 'Passed' : 'Failed';
+      } else if (hasAnyScore) {
+        status = 'In Progress';
+      }
+
+      results.push({
+        id: rep.id,
+        title: rep.title,
+        description: rep.description,
+        publishedAt: rep.publishedAt,
+        student: userObj,
+        folderBreakdown,
+        totalCombined: finalVal,
+        hasAllScores,
+        status,
+        gradeLetter: finalVal != null ? gradeLetter : '—',
+      });
+    }
+
+    res.json(results);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Per-student combined score: MCQ (objective) + theory (scoreboard column and/or per-question grades)
 router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {

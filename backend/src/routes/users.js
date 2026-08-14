@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, accountStatus: true, createdAt: true },
+      select: { id: true, email: true, name: true, avatarUrl: true, role: true, accountStatus: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(users);
@@ -23,9 +23,28 @@ router.get('/me', verifyToken, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: { id: true, email: true, name: true, role: true, accountStatus: true, createdAt: true },
+      select: { id: true, email: true, name: true, avatarUrl: true, role: true, accountStatus: true, createdAt: true },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update own profile (name, avatarUrl)
+router.patch('/profile', verifyToken, async (req, res, next) => {
+  try {
+    const { name, avatarUrl } = req.body;
+    const data = {};
+    if (name !== undefined) data.name = name;
+    if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
+
+    const user = await prisma.user.update({
+      where: { id: req.user.sub },
+      data,
+      select: { id: true, email: true, name: true, avatarUrl: true, role: true, accountStatus: true, createdAt: true },
+    });
     res.json(user);
   } catch (err) {
     next(err);

@@ -40,6 +40,7 @@ export default function DashboardLayout({ children }) {
     { href: '/questions', label: 'Questions', icon: '📝' },
     { href: '/grading', label: 'Grading / Publish', icon: '📊' },
     { href: '/users', label: 'Users', icon: '👥' },
+    { href: '/profile', label: 'My Profile', icon: '👤' },
     ...(user.role === 'OWNER' ? [{ href: '/superadmin', label: 'Superadmin', icon: '🛡️' }] : []),
   ];
 
@@ -50,9 +51,12 @@ export default function DashboardLayout({ children }) {
     { href: '/exams', label: 'My Exams', icon: '📁' },
     { href: '/exam', label: 'Take Exam', icon: '✏️' },
     { href: '/my-results', label: 'My Results', icon: '📈' },
+    { href: '/profile', label: 'My Profile', icon: '👤' },
   ];
 
   const links = isAdmin ? adminLinks : studentLinks;
+
+  const initialLetter = ((user.name || user.email || 'U').charAt(0) || 'U').toUpperCase();
 
   return (
     <div className="dashboard-layout">
@@ -86,15 +90,19 @@ export default function DashboardLayout({ children }) {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-badge">
-            <div className="user-avatar">
-              {((user.name || user.email || 'U').charAt(0) || 'U').toUpperCase()}
+          <Link href="/profile" className="user-badge" style={{ textDecoration: 'none', color: 'inherit' }}>
+            <div className="user-avatar" style={{ overflow: 'hidden' }}>
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                initialLetter
+              )}
             </div>
             <div className="user-info">
               <span className="user-name">{user.name || user.email || 'User'}</span>
               <span className="user-role">{roleLabel}</span>
             </div>
-          </div>
+          </Link>
           <button className="logout-btn" onClick={logout} title="Logout">
             ↪
           </button>
@@ -108,8 +116,17 @@ export default function DashboardLayout({ children }) {
             ☰
           </button>
           <div className="topbar-right">
-            <span className="role-pill">{roleLabel}</span>
-            <span className="topbar-name">{user.name || user.email}</span>
+            <Link href="/profile" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent, #6366f1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', overflow: 'hidden' }}>
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  initialLetter
+                )}
+              </div>
+              <span className="role-pill">{roleLabel}</span>
+              <span className="topbar-name">{user.name || user.email}</span>
+            </Link>
           </div>
         </header>
 
