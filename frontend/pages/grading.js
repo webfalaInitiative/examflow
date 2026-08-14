@@ -39,9 +39,14 @@ export default function GradingPublishOverviewPage() {
             <h1>Grading / Publish</h1>
             <p>Select an exam folder below to manage student grades, theory scores, and publish results.</p>
           </div>
-          <Link href="/exams" className="btn-outline">
-            📁 View All Folders
-          </Link>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link href="/grading/combine" className="btn-primary" style={{ background: 'linear-gradient(135deg, #027a48, #12b76a)' }}>
+              🔗 Combine / Merge Exam Results
+            </Link>
+            <Link href="/exams" className="btn-outline">
+              📁 View All Folders
+            </Link>
+          </div>
         </div>
 
         {error && <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>}

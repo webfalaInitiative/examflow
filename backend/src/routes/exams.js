@@ -102,124 +102,221 @@ router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, ne
   }
 });
 
+async function getExamScoreboardData(examId) {
+  const exam = await prisma.exam.findUnique({
+    where: { id: examId },
+    include: {
+      questions: {
+        include: { question: { select: { id: true, type: true, title: true } } },
+        orderBy: { sortOrder: 'asc' },
+      },
+      assignments: {
+        include: { user: { select: { id: true, email: true, name: true } } },
+      },
+    },
+  });
+  if (!exam) return null;
+
+  const n = exam.questions.length;
+  const qIds = new Set(exam.questions.map((eq) => eq.questionId));
+
+  const rows = await Promise.all(
+    exam.assignments.map(async (a) => {
+      const subs = await prisma.submission.findMany({
+        where: { userId: a.userId, examId },
+        include: { question: { select: { id: true, type: true } } },
+      });
+      const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
+
+      const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
+      const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
+      const manual =
+        a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
+          ? a.manualTheoryPercent
+          : null;
+
+      let mcqPoints = 0;
+      let mcqGradedCount = 0;
+      let theoryPoints = 0;
+      let theoryGradedCount = 0;
+
+      for (const eq of exam.questions) {
+        const q = eq.question;
+        const s = byQ.get(eq.questionId);
+        if (q.type === 'mcq') {
+          if (s && s.graded && s.score != null) {
+            mcqPoints += s.score;
+            mcqGradedCount += 1;
+          }
+        } else if (s && s.graded && s.score != null) {
+          theoryPoints += s.score;
+          theoryGradedCount += 1;
+        }
+      }
+
+      const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+
+      let theoryPercent = null;
+      if (nTheory > 0) {
+        if (manual != null) {
+          theoryPercent = manual;
+        } else if (theoryGradedCount === nTheory) {
+          theoryPercent = (theoryPoints / nTheory) * 100;
+        }
+      } else if (nMcq > 0 && manual != null) {
+        theoryPercent = manual;
+      }
+
+      const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
+      const theoryReady =
+        nTheory === 0 ||
+        manual != null ||
+        theoryGradedCount === nTheory;
+
+      const gradingComplete = mcqReady && theoryReady;
+
+      let finalPercent = null;
+      if (gradingComplete) {
+        const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
+        const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
+
+        if (mcqP != null && thP != null) {
+          finalPercent = (mcqP + thP) / 2;
+        } else if (mcqP != null) {
+          finalPercent = mcqP;
+        } else if (thP != null) {
+          finalPercent = thP;
+        }
+      }
+
+      return {
+        user: a.user,
+        assignment: {
+          examSubmittedAt: a.examSubmittedAt,
+          manualTheoryPercent: a.manualTheoryPercent,
+        },
+        mcqPercent,
+        theoryPercent,
+        finalPercent,
+        gradingComplete,
+        answeredCount: subs.length,
+        questionCount: n,
+        nMcq,
+        nTheory,
+      };
+    })
+  );
+
+  return { exam, rows };
+}
+
+// Combine / Merge results across multiple exam folders (e.g. Midterm 30% + Final Exam 70%)
+router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { items } = req.body; // Array of { examId: number, weight: number }
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array with examId and weight is required' });
+    }
+
+    const folderDetails = [];
+    const studentMap = new Map(); // userId -> { user, folderScores: {} }
+
+    for (const item of items) {
+      const examId = parseInt(item.examId);
+      const weight = parseFloat(item.weight) || 0;
+      if (Number.isNaN(examId) || weight < 0) continue;
+
+      const data = await getExamScoreboardData(examId);
+      if (!data) continue;
+
+      folderDetails.push({
+        id: data.exam.id,
+        title: data.exam.title,
+        weight,
+      });
+
+      for (const row of data.rows) {
+        const uId = row.user.id;
+        if (!studentMap.has(uId)) {
+          studentMap.set(uId, {
+            user: row.user,
+            folderScores: {},
+          });
+        }
+
+        const studentData = studentMap.get(uId);
+        const scorePercent = row.finalPercent;
+        const weightedScore = scorePercent != null ? (scorePercent * weight) / 100 : null;
+
+        studentData.folderScores[examId] = {
+          examTitle: data.exam.title,
+          percent: scorePercent,
+          weight,
+          weightedScore,
+          gradingComplete: row.gradingComplete,
+        };
+      }
+    }
+
+    const combinedRows = Array.from(studentMap.values()).map((student) => {
+      let totalCombined = 0;
+      let hasAllScores = true;
+
+      for (const f of folderDetails) {
+        const fs = student.folderScores[f.id];
+        if (fs && fs.weightedScore != null) {
+          totalCombined += fs.weightedScore;
+        } else {
+          hasAllScores = false;
+        }
+      }
+
+      let gradeLetter = '—';
+      const finalVal = hasAllScores ? Math.round(totalCombined * 10) / 10 : null;
+      if (finalVal != null) {
+        if (finalVal >= 80) gradeLetter = 'A';
+        else if (finalVal >= 70) gradeLetter = 'B';
+        else if (finalVal >= 60) gradeLetter = 'C';
+        else if (finalVal >= 50) gradeLetter = 'D';
+        else gradeLetter = 'F';
+      }
+
+      return {
+        user: student.user,
+        folderScores: student.folderScores,
+        totalCombined: finalVal,
+        hasAllScores,
+        status: finalVal != null ? (finalVal >= 50 ? 'Passed' : 'Failed') : 'Incomplete',
+        gradeLetter,
+      };
+    });
+
+    res.json({
+      folders: folderDetails,
+      rows: combinedRows,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Per-student combined score: MCQ (objective) + theory (scoreboard column and/or per-question grades)
 router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
-    const exam = await prisma.exam.findUnique({
-      where: { id: examId },
-      include: {
-        questions: {
-          include: { question: { select: { id: true, type: true, title: true } } },
-          orderBy: { sortOrder: 'asc' },
-        },
-        assignments: {
-          include: { user: { select: { id: true, email: true, name: true } } },
-        },
-      },
-    });
-    if (!exam) return res.status(404).json({ error: 'Exam not found' });
-
-    const n = exam.questions.length;
-    const qIds = new Set(exam.questions.map((eq) => eq.questionId));
-
-    const rows = await Promise.all(
-      exam.assignments.map(async (a) => {
-        const subs = await prisma.submission.findMany({
-          where: { userId: a.userId, examId },
-          include: { question: { select: { id: true, type: true } } },
-        });
-        const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
-
-        const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
-        const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
-        const manual =
-          a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
-            ? a.manualTheoryPercent
-            : null;
-
-        let mcqPoints = 0;
-        let mcqGradedCount = 0;
-        let theoryPoints = 0;
-        let theoryGradedCount = 0;
-
-        for (const eq of exam.questions) {
-          const q = eq.question;
-          const s = byQ.get(eq.questionId);
-          if (q.type === 'mcq') {
-            if (s && s.graded && s.score != null) {
-              mcqPoints += s.score;
-              mcqGradedCount += 1;
-            }
-          } else if (s && s.graded && s.score != null) {
-            theoryPoints += s.score;
-            theoryGradedCount += 1;
-          }
-        }
-
-        const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-
-        let theoryPercent = null;
-        if (nTheory > 0) {
-          if (manual != null) {
-            theoryPercent = manual;
-          } else if (theoryGradedCount === nTheory) {
-            theoryPercent = (theoryPoints / nTheory) * 100;
-          }
-        } else if (nMcq > 0 && manual != null) {
-          theoryPercent = manual;
-        }
-
-        const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
-        const theoryReady =
-          nTheory === 0 ||
-          manual != null ||
-          theoryGradedCount === nTheory;
-
-        const gradingComplete = mcqReady && theoryReady;
-
-        let finalPercent = null;
-        if (gradingComplete) {
-          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-          const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
-
-          if (mcqP != null && thP != null) {
-            finalPercent = (mcqP + thP) / 2;
-          } else if (mcqP != null) {
-            finalPercent = mcqP;
-          } else if (thP != null) {
-            finalPercent = thP;
-          }
-        }
-
-        return {
-          user: a.user,
-          assignment: {
-            examSubmittedAt: a.examSubmittedAt,
-            manualTheoryPercent: a.manualTheoryPercent,
-          },
-          mcqPercent,
-          theoryPercent,
-          finalPercent,
-          gradingComplete,
-          answeredCount: subs.length,
-          questionCount: n,
-          nMcq,
-          nTheory,
-        };
-      })
-    );
+    const data = await getExamScoreboardData(examId);
+    if (!data) return res.status(404).json({ error: 'Exam not found' });
 
     res.json({
       exam: {
-        id: exam.id,
-        title: exam.title,
-        resultsPublished: exam.resultsPublished,
-        publishRequested: exam.publishRequested,
-        publishRequestedAt: exam.publishRequestedAt,
-        publishRequestedBy: exam.publishRequestedBy,
+        id: data.exam.id,
+        title: data.exam.title,
+        resultsPublished: data.exam.resultsPublished,
+        publishRequested: data.exam.publishRequested,
+        publishRequestedAt: data.exam.publishRequestedAt,
+        publishRequestedBy: data.exam.publishRequestedBy,
       },
-      rows,
+      rows: data.rows,
     });
   } catch (err) {
     next(err);
