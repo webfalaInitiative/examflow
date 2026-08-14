@@ -398,6 +398,17 @@ router.get('/combine-results/published', verifyToken, async (req, res, next) => 
   }
 });
 
+// Delete / Unpublish a Combined Result Report (OWNER only)
+router.delete('/combine-results/published/:id', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    await prisma.combinedResultReport.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get logged-in student's combined score for published reports
 router.get('/combine-results/my-summary', verifyToken, async (req, res, next) => {
   try {
