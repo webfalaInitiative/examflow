@@ -69,6 +69,24 @@ export default function ExamGradingPage() {
     setSavingId(null);
   };
 
+  const [requesting, setRequesting] = useState(false);
+  const isOwner = user?.role === 'OWNER';
+
+  const requestPublish = async () => {
+    if (!window.confirm('Request Superadmin (OWNER) to publish results for this exam? Superadmins will be notified.')) return;
+    setRequesting(true);
+    setMsg('');
+    try {
+      const r = await api.post(`/exams/${id}/request-publish`);
+      setExam(r.data);
+      await load();
+      setMsg('Publish request sent to Superadmin successfully.');
+    } catch (e) {
+      setMsg(e.response?.data?.error || 'Request failed');
+    }
+    setRequesting(false);
+  };
+
   const publish = async () => {
     if (!window.confirm('Publish results for all students in this exam? They will see scores and receive an email.')) return;
     setPublishing(true);
@@ -109,28 +127,42 @@ export default function ExamGradingPage() {
             <h1>Exam grading — {exam?.title || '…'}</h1>
             <p>
               Objective (MCQ) scores are graded automatically. Use <strong>Theory (0–100)</strong> for typed theory exams, or for <strong>MCQ-only</strong> exams to
-              enter an external theory paper mark; it blends with MCQ as one extra weighted part. <strong>Final / 100</strong> updates here; publish when ready.
+              enter an external theory paper mark; it blends with MCQ as one extra weighted part. <strong>Final / 100</strong> updates here; superadmin publishes when ready.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <Link href="/grading" className="btn-sm btn-outline">
               ← All Grading / Publish
             </Link>
             <Link href="/exams" className="btn-sm btn-outline">
               ← Exam folders
             </Link>
-            {exam && !exam.resultsPublished && (
+            {exam && !exam.resultsPublished && isOwner && (
               <button type="button" className="btn-primary" disabled={publishing} onClick={publish}>
-                {publishing ? 'Publishing…' : 'Publish results & notify students'}
+                {publishing ? 'Publishing…' : exam.publishRequested ? '🔔 Publish results (Requested by Admin)' : 'Publish results & notify students'}
               </button>
             )}
-            {exam?.resultsPublished && (
+            {exam && !exam.resultsPublished && !isOwner && (
+              <>
+                {exam.publishRequested ? (
+                  <span className="badge orange">⏳ Publish Requested from Superadmin</span>
+                ) : (
+                  <button type="button" className="btn-primary" disabled={requesting} onClick={requestPublish}>
+                    {requesting ? 'Sending Request…' : '📩 Request Superadmin to Publish'}
+                  </button>
+                )}
+              </>
+            )}
+            {exam?.resultsPublished && isOwner && (
               <>
                 <span className="badge green">Results published</span>
                 <button type="button" className="btn-sm btn-danger" disabled={publishing} onClick={unpublish}>
                   {publishing ? 'Unpublishing…' : 'Unpublish results'}
                 </button>
               </>
+            )}
+            {exam?.resultsPublished && !isOwner && (
+              <span className="badge green">Results published</span>
             )}
           </div>
         </div>

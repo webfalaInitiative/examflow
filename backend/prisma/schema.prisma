@@ -73,6 +73,10 @@ model Exam {
   /// When false, students do not see scores for this exam (email when published)
   resultsPublished   Boolean   @default(false)
   resultsPublishedAt DateTime?
+  /// Set when admin requests superadmin (OWNER) to publish exam results
+  publishRequested   Boolean   @default(false)
+  publishRequestedAt DateTime?
+  publishRequestedBy Int?
 
   creator     User             @relation("ExamCreator", fields: [createdBy], references: [id])
   questions   ExamQuestion[]

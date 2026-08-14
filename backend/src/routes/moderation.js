@@ -48,6 +48,23 @@ router.get('/users/pending', verifyToken, requireRole('OWNER'), async (req, res,
   }
 });
 
+// Pending publish requests (exams where admin requested superadmin to publish)
+router.get('/exams/pending-publish', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+  try {
+    const exams = await prisma.exam.findMany({
+      where: { publishRequested: true, resultsPublished: false },
+      include: {
+        creator: { select: { id: true, name: true, email: true } },
+        _count: { select: { questions: true, assignments: true } },
+      },
+      orderBy: { publishRequestedAt: 'desc' },
+    });
+    res.json(exams);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/questions/:id/approve', verifyToken, requireRole('OWNER'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);

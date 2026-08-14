@@ -2,8 +2,24 @@ import express from 'express';
 import prisma from '../config/prismaClient.js';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import { sendMail } from '../lib/email.js';
+import { logModeration } from '../lib/moderationLog.js';
 
 const router = express.Router();
+
+function seededRandom(seed) {
+  let x = Math.sin(seed++) * 10000;
+  return x - Math.floor(x);
+}
+
+function shuffleArrayWithSeed(array, seed) {
+  const arr = [...array];
+  let currentSeed = seed;
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom(currentSeed++) * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 // List exams
 // Admins see all exams they created (or all if OWNER)
@@ -194,7 +210,17 @@ router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async 
       })
     );
 
-    res.json({ exam: { id: exam.id, title: exam.title, resultsPublished: exam.resultsPublished }, rows });
+    res.json({
+      exam: {
+        id: exam.id,
+        title: exam.title,
+        resultsPublished: exam.resultsPublished,
+        publishRequested: exam.publishRequested,
+        publishRequestedAt: exam.publishRequestedAt,
+        publishRequestedBy: exam.publishRequestedBy,
+      },
+      rows,
+    });
   } catch (err) {
     next(err);
   }
@@ -235,8 +261,48 @@ router.patch(
   }
 );
 
-// Publish results — students can then see scores; sends email to each assigned student
-router.post('/:id/publish-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+// Request publish results — ADMIN requests Superadmin (OWNER) to publish exam results
+router.post('/:id/request-publish', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const examId = parseInt(req.params.id);
+    const exam = await prisma.exam.update({
+      where: { id: examId },
+      data: {
+        publishRequested: true,
+        publishRequestedAt: new Date(),
+        publishRequestedBy: req.user.sub,
+      },
+    });
+
+    const requester = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { name: true, email: true },
+    });
+    const requesterName = requester?.name || requester?.email || 'An admin';
+
+    const owners = await prisma.user.findMany({
+      where: { role: 'OWNER' },
+      select: { email: true },
+    });
+
+    const appUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
+    for (const owner of owners) {
+      if (!owner.email) continue;
+      await sendMail({
+        to: owner.email,
+        subject: `Publish Request: "${exam.title}"`,
+        text: `Hello Superadmin,\n\n${requesterName} has requested that you publish results for the exam "${exam.title}".\n\nPlease log in to review and publish the results:\n${appUrl}/exams/${exam.id}/grading\n\nThank you.`,
+      });
+    }
+
+    res.json(exam);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Publish results — Superadmin (OWNER) only; students can then see scores; sends email to each assigned student
+router.post('/:id/publish-results', verifyToken, requireRole('OWNER'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
     const exam = await prisma.exam.update({
@@ -244,10 +310,19 @@ router.post('/:id/publish-results', verifyToken, requireRole('OWNER', 'ADMIN'), 
       data: {
         resultsPublished: true,
         resultsPublishedAt: new Date(),
+        publishRequested: false,
       },
       include: {
         assignments: { include: { user: { select: { id: true, email: true, name: true } } } },
       },
+    });
+
+    await logModeration({
+      actorId: req.user.sub,
+      entityType: 'EXAM',
+      entityId: examId,
+      action: 'EXAM_PUBLISH_RESULTS',
+      details: { title: exam.title },
     });
 
     const appUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
@@ -267,8 +342,8 @@ router.post('/:id/publish-results', verifyToken, requireRole('OWNER', 'ADMIN'), 
   }
 });
 
-// Unpublish results — sets resultsPublished to false, resultsPublishedAt to null
-router.post('/:id/unpublish-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+// Unpublish results — Superadmin (OWNER) only; sets resultsPublished to false, resultsPublishedAt to null
+router.post('/:id/unpublish-results', verifyToken, requireRole('OWNER'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
     const exam = await prisma.exam.update({
@@ -479,6 +554,10 @@ router.get('/:id', verifyToken, async (req, res, next) => {
         }
         return q;
       });
+
+      // Deterministically shuffle questions per student using seed (userId + examId)
+      const seed = sub * 10007 + examId * 997;
+      exam.questions = shuffleArrayWithSeed(exam.questions, seed);
     }
 
     res.json(exam);

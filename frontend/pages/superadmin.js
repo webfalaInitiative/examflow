@@ -3,6 +3,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import api from '../lib/api';
 
 export default function SuperadminPage() {
@@ -11,7 +12,8 @@ export default function SuperadminPage() {
   const [logs, setLogs] = useState([]);
   const [pendingQuestions, setPendingQuestions] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
-  const [tab, setTab] = useState('history');
+  const [pendingPublish, setPendingPublish] = useState([]);
+  const [tab, setTab] = useState('publish');
   const [err, setErr] = useState('');
 
   const loadAll = () => {
@@ -19,6 +21,7 @@ export default function SuperadminPage() {
     api.get('/moderation/logs').then((r) => setLogs(r.data)).catch(() => setErr('Failed to load history'));
     api.get('/moderation/questions/pending').then((r) => setPendingQuestions(r.data)).catch(() => {});
     api.get('/moderation/users/pending').then((r) => setPendingUsers(r.data)).catch(() => {});
+    api.get('/moderation/exams/pending-publish').then((r) => setPendingPublish(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -48,6 +51,15 @@ export default function SuperadminPage() {
     await api.post(`/moderation/users/${id}/reject`, { reason });
     loadAll();
   };
+  const publishExam = async (examId) => {
+    if (!window.confirm('Publish results for all students in this exam? Emails will be sent.')) return;
+    try {
+      await api.post(`/exams/${examId}/publish-results`);
+      loadAll();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Publish failed');
+    }
+  };
 
   return (
     <RequireAuth>
@@ -58,25 +70,71 @@ export default function SuperadminPage() {
           <>
             <div className="page-header">
               <h1>Superadmin</h1>
-              <p>Approval history, pending questions, and pending student accounts (authority above admins).</p>
+              <p>Approval history, result publish requests, pending questions, and pending student accounts.</p>
             </div>
 
             {err && <p className="error" role="alert">{err}</p>}
 
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-body" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {['history', 'questions', 'students'].map((t) => (
+                {[
+                  { id: 'publish', label: `Publish requests (${pendingPublish.length})` },
+                  { id: 'questions', label: `Pending questions (${pendingQuestions.length})` },
+                  { id: 'students', label: `Pending students (${pendingUsers.length})` },
+                  { id: 'history', label: 'History' },
+                ].map((item) => (
                   <button
-                    key={t}
+                    key={item.id}
                     type="button"
-                    className={tab === t ? 'btn-primary' : 'secondary'}
-                    onClick={() => setTab(t)}
+                    className={tab === item.id ? 'btn-primary' : 'secondary'}
+                    onClick={() => setTab(item.id)}
                   >
-                    {t === 'history' ? 'History' : t === 'questions' ? `Pending questions (${pendingQuestions.length})` : `Pending students (${pendingUsers.length})`}
+                    {item.label}
                   </button>
                 ))}
               </div>
             </div>
+
+            {tab === 'publish' && (
+              <div className="panel">
+                <div className="panel-header"><h2>Result publish requests from Admins</h2></div>
+                <div className="panel-body no-pad">
+                  {pendingPublish.length === 0 ? (
+                    <div className="empty-state"><p>No pending publish requests.</p></div>
+                  ) : (
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Exam Title</th>
+                          <th>Created By</th>
+                          <th>Requested</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingPublish.map((e) => (
+                          <tr key={e.id}>
+                            <td><strong>{e.title}</strong></td>
+                            <td>{e.creator?.name || e.creator?.email || 'Admin'}</td>
+                            <td>{e.publishRequestedAt ? new Date(e.publishRequestedAt).toLocaleString() : 'Recently'}</td>
+                            <td>
+                              <div className="btn-group">
+                                <button type="button" className="btn-sm btn-success" onClick={() => publishExam(e.id)}>
+                                  Publish Results
+                                </button>
+                                <Link href={`/exams/${e.id}/grading`} className="btn-sm btn-outline">
+                                  Review Scoreboard →
+                                </Link>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
 
             {tab === 'history' && (
               <div className="panel">

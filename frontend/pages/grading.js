@@ -66,6 +66,7 @@ export default function GradingPublishOverviewPage() {
                 const questionCount = exam._count?.questions ?? exam.questions?.length ?? 0;
                 const assignedCount = (exam._count?.assignments ?? exam.assignments?.length) ?? 0;
                 const isPublished = exam.resultsPublished;
+                const isRequested = exam.publishRequested;
 
                 return (
                   <div key={exam.id} className="exam-card panel">
@@ -74,8 +75,8 @@ export default function GradingPublishOverviewPage() {
                       <div className="exam-card-info">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                           <h3>{exam.title}</h3>
-                          <span className={`badge ${isPublished ? 'green' : 'orange'}`} style={{ whiteSpace: 'nowrap' }}>
-                            {isPublished ? 'Published' : 'Draft / Unpublished'}
+                          <span className={`badge ${isPublished ? 'green' : isRequested ? 'orange' : 'gray'}`} style={{ whiteSpace: 'nowrap' }}>
+                            {isPublished ? 'Published' : isRequested ? '⏳ Publish Requested' : 'Draft'}
                           </span>
                         </div>
                         <p>{exam.description || 'No description provided'}</p>

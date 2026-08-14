@@ -403,6 +403,7 @@ export default function ExamPage() {
               isTimeUp={isTimeUp}
               examComplete={examComplete}
               isExamMode={isExamMode}
+              questionNumber={step + 1}
             />
           ) : (
             !isExamMode &&
@@ -419,6 +420,7 @@ export default function ExamPage() {
                 isTimeUp={isTimeUp}
                 examComplete={false}
                 isExamMode={isExamMode}
+                questionNumber={index + 1}
                 styleDelay={index * 0.05}
               />
             ))
