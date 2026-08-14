@@ -117,7 +117,7 @@ async function getExamScoreboardData(examId) {
   });
   if (!exam) return null;
 
-  // Gather all unique users: from explicit assignments, submissions for this exam, or system students
+  // Gather unique users: from explicit assignments or submissions for this exam folder
   const userMap = new Map();
 
   for (const a of exam.assignments) {
@@ -141,20 +141,6 @@ async function getExamScoreboardData(examId) {
     if (s.user && !userMap.has(s.user.id)) {
       userMap.set(s.user.id, {
         user: s.user,
-        assignment: null,
-      });
-    }
-  }
-
-  // Fallback: If no assignments or submissions for this folder, include all registered STUDENT users
-  if (userMap.size === 0) {
-    const allStudents = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
-      select: { id: true, email: true, name: true },
-    });
-    for (const u of allStudents) {
-      userMap.set(u.id, {
-        user: u,
         assignment: null,
       });
     }
@@ -257,30 +243,31 @@ async function getExamScoreboardData(examId) {
 router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const { items } = req.body; // Array of { examId: number, weight: number }
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: 'items array with examId and weight is required' });
+    if (!Array.isArray(items) || items.length < 2) {
+      return res.status(400).json({ error: 'At least 2 exam items with examId and weight are required' });
     }
 
-    const folderDetails = [];
-    const studentMap = new Map(); // userId -> { user, folderScores: {} }
-
-    // If any student is missing in a folder, also query all active students so the table is never empty
-    const allSystemStudents = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
-      select: { id: true, email: true, name: true },
-    });
-    for (const u of allSystemStudents) {
-      studentMap.set(u.id, {
-        user: u,
-        folderScores: {},
-      });
-    }
-
+    // Filter out duplicate exam IDs to prevent double-counting
+    const seenExamIds = new Set();
+    const cleanItems = [];
     for (const item of items) {
       const examId = parseInt(item.examId);
       const weight = parseFloat(item.weight) || 0;
-      if (Number.isNaN(examId) || weight < 0) continue;
+      if (Number.isNaN(examId) || weight <= 0) continue;
+      if (seenExamIds.has(examId)) continue;
+      seenExamIds.add(examId);
+      cleanItems.push({ examId, weight });
+    }
 
+    if (cleanItems.length < 2) {
+      return res.status(400).json({ error: 'Please select at least 2 distinct exam folders.' });
+    }
+
+    const folderDetails = [];
+    const studentMap = new Map(); // userId -> { user, folderScores: {}, hasParticipated: boolean }
+
+    for (const item of cleanItems) {
+      const { examId, weight } = item;
       const data = await getExamScoreboardData(examId);
       if (!data) continue;
 
@@ -296,12 +283,17 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
           studentMap.set(uId, {
             user: row.user,
             folderScores: {},
+            hasParticipated: false,
           });
         }
 
         const studentData = studentMap.get(uId);
         const scorePercent = row.finalPercent;
         const weightedScore = scorePercent != null ? (scorePercent * weight) / 100 : null;
+
+        if (row.answeredCount > 0 || row.gradingComplete || row.finalPercent != null || row.assignment?.examSubmittedAt != null) {
+          studentData.hasParticipated = true;
+        }
 
         studentData.folderScores[examId] = {
           examTitle: data.exam.title,
@@ -313,7 +305,10 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
       }
     }
 
-    const combinedRows = Array.from(studentMap.values()).map((student) => {
+    // Only include students who have participated (assigned or answered) in AT LEAST ONE selected folder
+    const activeStudents = Array.from(studentMap.values()).filter((s) => s.hasParticipated);
+
+    const combinedRows = activeStudents.map((student) => {
       let totalCombined = 0;
       let hasAnyScore = false;
       let hasAllScores = true;

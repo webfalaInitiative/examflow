@@ -75,6 +75,12 @@ export default function CombineResultsPage() {
       return;
     }
 
+    const examIds = validItems.map((i) => i.examId);
+    if (new Set(examIds).size < validItems.length) {
+      setError('Please select different exam folders. You have selected the same exam folder more than once.');
+      return;
+    }
+
     if (totalWeight !== 100) {
       setError(`The total weight must equal 100%. Current total: ${totalWeight}%`);
       return;
