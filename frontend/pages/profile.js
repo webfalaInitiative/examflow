@@ -23,15 +23,47 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setErr('Image file size must be less than 5MB.');
+    if (file.size > 12 * 1024 * 1024) {
+      setErr('Image file size must be less than 12MB.');
       return;
     }
 
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarUrl(reader.result);
-      setErr('');
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 300; // 300px max width/height for avatar
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Compress to JPEG at 80% quality (~20KB - 40KB base64 string)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        setAvatarUrl(compressedDataUrl);
+        setErr('');
+      };
+      img.onerror = () => {
+        setErr('Invalid image file format.');
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
