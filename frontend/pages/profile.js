@@ -8,6 +8,7 @@ export default function ProfilePage() {
   const { user, updateUser } = useAuth();
   const [name, setName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [matricNumber, setMatricNumber] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -16,6 +17,7 @@ export default function ProfilePage() {
     if (user) {
       setName(user.name || '');
       setAvatarUrl(user.avatarUrl || '');
+      setMatricNumber(user.matricNumber || '');
     }
   }, [user]);
 
@@ -78,6 +80,7 @@ export default function ProfilePage() {
       const res = await api.patch('/users/profile', {
         name: name.trim(),
         avatarUrl: avatarUrl.trim() || null,
+        matricNumber: matricNumber.trim() || null,
       });
 
       updateUser(res.data);
@@ -159,6 +162,21 @@ export default function ProfilePage() {
                   required
                   style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db' }}
                 />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Matriculation Number</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={matricNumber}
+                  onChange={(e) => setMatricNumber(e.target.value)}
+                  placeholder="e.g. 2026/CS/001 or EXM/2026/042"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db' }}
+                />
+                <span style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, display: 'block' }}>
+                  Your official student matriculation number will appear on grade scoreboards and academic transcripts.
+                </span>
               </div>
 
               <div style={{ marginBottom: 24 }}>

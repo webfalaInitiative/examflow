@@ -111,7 +111,7 @@ async function getExamScoreboardData(examId) {
         orderBy: { sortOrder: 'asc' },
       },
       assignments: {
-        include: { user: { select: { id: true, email: true, name: true } } },
+        include: { user: { select: { id: true, email: true, name: true, avatarUrl: true, matricNumber: true } } },
       },
     },
   });
@@ -132,7 +132,7 @@ async function getExamScoreboardData(examId) {
   const subUsers = await prisma.submission.findMany({
     where: { examId },
     select: {
-      user: { select: { id: true, email: true, name: true } },
+      user: { select: { id: true, email: true, name: true, avatarUrl: true, matricNumber: true } },
     },
     distinct: ['userId'],
   });
@@ -421,7 +421,7 @@ router.get('/combine-results/my-summary', verifyToken, async (req, res, next) =>
 
     const userObj = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, avatarUrl: true },
+      select: { id: true, email: true, name: true, avatarUrl: true, matricNumber: true },
     });
 
     const results = [];

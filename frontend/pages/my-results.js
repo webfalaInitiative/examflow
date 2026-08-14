@@ -245,9 +245,16 @@ export default function MyResultsPage() {
                     {selectedCombined.student?.name || user?.name || user?.email}
                   </h3>
                   <p style={{ margin: '2px 0 0', color: '#64748b', fontSize: 14 }}>{user?.email}</p>
-                  <span style={{ fontSize: 12, background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, marginTop: 4, display: 'inline-block' }}>
-                    Student ID: #{user?.id}
-                  </span>
+                  <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
+                      ID: #{user?.id}
+                    </span>
+                    {(selectedCombined.student?.matricNumber || user?.matricNumber) && (
+                      <span style={{ fontSize: 12, background: '#f3e8ff', color: '#6b21a8', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                        Matric No: {selectedCombined.student?.matricNumber || user?.matricNumber}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Final Combined Score</div>

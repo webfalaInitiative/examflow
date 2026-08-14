@@ -63,6 +63,7 @@ router.post('/login', async (req, res, next) => {
         email: user.email,
         name: user.name,
         avatarUrl: user.avatarUrl,
+        matricNumber: user.matricNumber,
         role: user.role,
         accountStatus: user.accountStatus,
       },

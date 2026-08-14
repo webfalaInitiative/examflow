@@ -119,14 +119,43 @@ export default function ExamGradingPage() {
 
   if (!user || !isStaff) return null;
 
+  const exportCSV = () => {
+    if (!scoreboard || !scoreboard.rows || scoreboard.rows.length === 0) return;
+
+    const headers = ['Student Name', 'Matric Number', 'Email', 'MCQ Score (%)', 'Theory Score (%)', 'Final Score (%)', 'Status'];
+    const csvLines = [headers.join(',')];
+
+    scoreboard.rows.forEach((row) => {
+      const line = [
+        `"${row.user.name || ''}"`,
+        `"${row.user.matricNumber || '—'}"`,
+        `"${row.user.email || ''}"`,
+        row.mcqPercent != null ? `${row.mcqPercent.toFixed(1)}%` : '—',
+        row.theoryPercent != null ? `${row.theoryPercent.toFixed(1)}%` : '—',
+        row.finalPercent != null ? `${row.finalPercent.toFixed(1)}%` : '—',
+        `"${row.gradingComplete ? (row.finalPercent >= 40 ? 'Passed' : 'Failed') : 'Pending'}"`,
+      ];
+      csvLines.push(line.join(','));
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvLines.join('\n'));
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    const safeTitle = (exam?.title || 'Exam').replace(/[^a-z0-9]/gi, '_');
+    link.setAttribute('download', `${safeTitle}_Results_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <RequireAuth>
       <DashboardLayout>
-        <div className="page-header">
+        <div className="page-header flex-header">
           <div>
-            <h1>Exam grading — {exam?.title || '…'}</h1>
+            <h1>{exam ? `Grading / Publish: ${exam.title}` : 'Grading'}</h1>
             <p>
-              Objective (MCQ) scores are graded automatically. Use <strong>Theory (0–100)</strong> for typed theory exams, or for <strong>MCQ-only</strong> exams to
+              Theory marks are optional 0–100. If set, they average with MCQ %. Leave blank if unused. Or
               enter an external theory paper mark; it blends with MCQ as one extra weighted part. <strong>Final / 100</strong> updates here; superadmin publishes when ready.
             </p>
           </div>
@@ -183,14 +212,18 @@ export default function ExamGradingPage() {
         ) : (
           scoreboard && (
             <div className="panel">
-              <div className="panel-header">
+              <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <h2>Scoreboard (per student)</h2>
+                <button type="button" className="btn-sm btn-outline" onClick={exportCSV}>
+                  📥 Export Exam Results to CSV
+                </button>
               </div>
               <div className="panel-body no-pad">
                 <table className="data-table">
                   <thead>
                     <tr>
                       <th>Student</th>
+                      <th>Matric No.</th>
                       <th>MCQ %</th>
                       <th>Theory (0–100)</th>
                       <th>Final / 100</th>
@@ -200,7 +233,16 @@ export default function ExamGradingPage() {
                   <tbody>
                     {scoreboard.rows.map((row) => (
                       <tr key={row.user.id}>
-                        <td>{row.user.name || row.user.email}</td>
+                        <td>
+                          <strong>{row.user.name || row.user.email}</strong>
+                          <br />
+                          <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{row.user.email}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600, color: 'var(--gray-700)' }}>
+                            {row.user.matricNumber || '—'}
+                          </span>
+                        </td>
                         <td>{row.mcqPercent != null ? row.mcqPercent.toFixed(0) + '%' : '—'}</td>
                         <td>
                           {row.nMcq > 0 || row.nTheory > 0 ? (

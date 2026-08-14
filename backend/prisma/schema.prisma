@@ -20,6 +20,7 @@ model User {
   password  String
   name      String?
   avatarUrl String?
+  matricNumber String?
   role      RoleType @default(STUDENT)
   /// ACTIVE | PENDING | REJECTED — new students register as PENDING until Superadmin (OWNER) approves
   accountStatus String @default("ACTIVE")

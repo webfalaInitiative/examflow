@@ -31,6 +31,44 @@ export default function GradingPublishOverviewPage() {
 
   const isAdmin = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
+  const downloadExamCSV = async (examId, examTitle) => {
+    try {
+      const res = await api.get(`/exams/${examId}/scoreboard`);
+      const scoreboard = res.data;
+      if (!scoreboard || !scoreboard.rows || scoreboard.rows.length === 0) {
+        alert('No student results available for this exam folder yet.');
+        return;
+      }
+
+      const headers = ['Student Name', 'Matric Number', 'Email', 'MCQ Score (%)', 'Theory Score (%)', 'Final Score (%)', 'Status'];
+      const csvLines = [headers.join(',')];
+
+      scoreboard.rows.forEach((row) => {
+        const line = [
+          `"${row.user.name || ''}"`,
+          `"${row.user.matricNumber || '—'}"`,
+          `"${row.user.email || ''}"`,
+          row.mcqPercent != null ? `${row.mcqPercent.toFixed(1)}%` : '—',
+          row.theoryPercent != null ? `${row.theoryPercent.toFixed(1)}%` : '—',
+          row.finalPercent != null ? `${row.finalPercent.toFixed(1)}%` : '—',
+          `"${row.gradingComplete ? (row.finalPercent >= 40 ? 'Passed' : 'Failed') : 'Pending'}"`,
+        ];
+        csvLines.push(line.join(','));
+      });
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvLines.join('\n'));
+      const link = document.createElement('a');
+      link.setAttribute('href', csvContent);
+      const safeTitle = (examTitle || 'Exam').replace(/[^a-z0-9]/gi, '_');
+      link.setAttribute('download', `${safeTitle}_Results_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      alert('Failed to download exam CSV');
+    }
+  };
+
   return (
     <RequireAuth>
       <DashboardLayout>
@@ -92,17 +130,17 @@ export default function GradingPublishOverviewPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="exam-card-footer" style={{ justifyContent: 'flex-start', paddingTop: 12 }}>
+                    <div className="exam-card-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingTop: 12 }}>
                       <Link
                         href={`/exams/${exam.id}/grading`}
                         className="btn-primary"
                         style={{
                           background: 'linear-gradient(135deg, #1d55ea, #3373f5)',
                           color: '#ffffff',
-                          padding: '10px 18px',
+                          padding: '8px 14px',
                           borderRadius: '8px',
                           fontWeight: 600,
-                          fontSize: '14px',
+                          fontSize: '13px',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
@@ -111,6 +149,14 @@ export default function GradingPublishOverviewPage() {
                       >
                         Grading / publish →
                       </Link>
+                      <button
+                        type="button"
+                        className="btn-sm btn-outline"
+                        onClick={() => downloadExamCSV(exam.id, exam.title)}
+                        style={{ fontSize: 12, padding: '6px 10px' }}
+                      >
+                        📥 Export CSV
+                      </button>
                     </div>
                   </div>
                 );

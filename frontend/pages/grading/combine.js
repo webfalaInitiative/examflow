@@ -174,7 +174,7 @@ export default function CombineResultsPage() {
   const exportCSV = () => {
     if (!report || !report.rows || report.rows.length === 0) return;
 
-    const headers = ['Student Name', 'Email'];
+    const headers = ['Student Name', 'Matric Number', 'Email'];
     report.folders.forEach((f) => {
       headers.push(`${f.title} (${f.weight}%)`);
       headers.push(`${f.title} (Weighted Pts)`);
@@ -186,6 +186,7 @@ export default function CombineResultsPage() {
     report.rows.forEach((row) => {
       const line = [
         `"${row.user.name || ''}"`,
+        `"${row.user.matricNumber || '—'}"`,
         `"${row.user.email || ''}"`,
       ];
       report.folders.forEach((f) => {
@@ -393,6 +394,7 @@ export default function CombineResultsPage() {
                 <thead>
                   <tr>
                     <th>Student</th>
+                    <th>Matric No.</th>
                     {report.folders.map((f) => (
                       <th key={f.id}>
                         {f.title}
@@ -410,7 +412,7 @@ export default function CombineResultsPage() {
                 <tbody>
                   {report.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={report.folders.length + 4} style={{ textAlign: 'center', padding: 24, color: 'var(--gray-500)' }}>
+                      <td colSpan={report.folders.length + 5} style={{ textAlign: 'center', padding: 24, color: 'var(--gray-500)' }}>
                         No students assigned to the selected exam folders.
                       </td>
                     </tr>
@@ -421,6 +423,11 @@ export default function CombineResultsPage() {
                           <strong>{row.user.name || row.user.email}</strong>
                           <br />
                           <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{row.user.email}</span>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 600, color: 'var(--gray-700)' }}>
+                            {row.user.matricNumber || '—'}
+                          </span>
                         </td>
                         {report.folders.map((f) => {
                           const scoreObj = row.folderScores[f.id];
