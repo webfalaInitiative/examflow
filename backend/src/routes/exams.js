@@ -117,13 +117,56 @@ async function getExamScoreboardData(examId) {
   });
   if (!exam) return null;
 
+  // Gather all unique users: from explicit assignments, submissions for this exam, or system students
+  const userMap = new Map();
+
+  for (const a of exam.assignments) {
+    if (a.user) {
+      userMap.set(a.user.id, {
+        user: a.user,
+        assignment: a,
+      });
+    }
+  }
+
+  const subUsers = await prisma.submission.findMany({
+    where: { examId },
+    select: {
+      user: { select: { id: true, email: true, name: true } },
+    },
+    distinct: ['userId'],
+  });
+
+  for (const s of subUsers) {
+    if (s.user && !userMap.has(s.user.id)) {
+      userMap.set(s.user.id, {
+        user: s.user,
+        assignment: null,
+      });
+    }
+  }
+
+  // Fallback: If no assignments or submissions for this folder, include all registered STUDENT users
+  if (userMap.size === 0) {
+    const allStudents = await prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      select: { id: true, email: true, name: true },
+    });
+    for (const u of allStudents) {
+      userMap.set(u.id, {
+        user: u,
+        assignment: null,
+      });
+    }
+  }
+
   const n = exam.questions.length;
   const qIds = new Set(exam.questions.map((eq) => eq.questionId));
 
   const rows = await Promise.all(
-    exam.assignments.map(async (a) => {
+    Array.from(userMap.values()).map(async ({ user, assignment }) => {
       const subs = await prisma.submission.findMany({
-        where: { userId: a.userId, examId },
+        where: { userId: user.id, examId },
         include: { question: { select: { id: true, type: true } } },
       });
       const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
@@ -131,8 +174,8 @@ async function getExamScoreboardData(examId) {
       const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
       const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
       const manual =
-        a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
-          ? a.manualTheoryPercent
+        assignment && assignment.manualTheoryPercent != null && !Number.isNaN(assignment.manualTheoryPercent)
+          ? assignment.manualTheoryPercent
           : null;
 
       let mcqPoints = 0;
@@ -190,10 +233,10 @@ async function getExamScoreboardData(examId) {
       }
 
       return {
-        user: a.user,
+        user,
         assignment: {
-          examSubmittedAt: a.examSubmittedAt,
-          manualTheoryPercent: a.manualTheoryPercent,
+          examSubmittedAt: assignment ? assignment.examSubmittedAt : null,
+          manualTheoryPercent: assignment ? assignment.manualTheoryPercent : null,
         },
         mcqPercent,
         theoryPercent,
@@ -220,6 +263,18 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
 
     const folderDetails = [];
     const studentMap = new Map(); // userId -> { user, folderScores: {} }
+
+    // If any student is missing in a folder, also query all active students so the table is never empty
+    const allSystemStudents = await prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      select: { id: true, email: true, name: true },
+    });
+    for (const u of allSystemStudents) {
+      studentMap.set(u.id, {
+        user: u,
+        folderScores: {},
+      });
+    }
 
     for (const item of items) {
       const examId = parseInt(item.examId);
@@ -260,19 +315,21 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
 
     const combinedRows = Array.from(studentMap.values()).map((student) => {
       let totalCombined = 0;
+      let hasAnyScore = false;
       let hasAllScores = true;
 
       for (const f of folderDetails) {
         const fs = student.folderScores[f.id];
         if (fs && fs.weightedScore != null) {
           totalCombined += fs.weightedScore;
+          hasAnyScore = true;
         } else {
           hasAllScores = false;
         }
       }
 
       let gradeLetter = '—';
-      const finalVal = hasAllScores ? Math.round(totalCombined * 10) / 10 : null;
+      const finalVal = hasAnyScore ? Math.round(totalCombined * 10) / 10 : null;
       if (finalVal != null) {
         if (finalVal >= 80) gradeLetter = 'A';
         else if (finalVal >= 70) gradeLetter = 'B';
@@ -281,13 +338,20 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
         else gradeLetter = 'F';
       }
 
+      let status = 'Incomplete';
+      if (hasAllScores && finalVal != null) {
+        status = finalVal >= 50 ? 'Passed' : 'Failed';
+      } else if (hasAnyScore) {
+        status = 'In Progress';
+      }
+
       return {
         user: student.user,
         folderScores: student.folderScores,
         totalCombined: finalVal,
         hasAllScores,
-        status: finalVal != null ? (finalVal >= 50 ? 'Passed' : 'Failed') : 'Incomplete',
-        gradeLetter,
+        status,
+        gradeLetter: finalVal != null ? gradeLetter : '—',
       };
     });
 
