@@ -251,7 +251,7 @@ export default function MyResultsPage() {
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Final Combined Score</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: selectedCombined.totalCombined >= 50 ? '#15803d' : '#b91c1c' }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: selectedCombined.totalCombined >= 40 ? '#15803d' : '#b91c1c' }}>
                     {selectedCombined.totalCombined != null ? `${selectedCombined.totalCombined.toFixed(1)}%` : '—'}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#4338ca' }}>
@@ -341,7 +341,7 @@ export default function MyResultsPage() {
                       </td>
                       <td>
                         {c.totalCombined != null ? (
-                          <strong style={{ color: c.totalCombined >= 50 ? 'var(--success-700)' : 'var(--error-700)' }}>
+                          <strong style={{ color: c.totalCombined >= 40 ? 'var(--success-700)' : 'var(--error-700)' }}>
                             {c.totalCombined.toFixed(1)}%
                           </strong>
                         ) : '—'}

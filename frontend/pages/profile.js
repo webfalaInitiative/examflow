@@ -56,7 +56,6 @@ export default function ProfilePage() {
       setSaving(false);
     }
   };
-
   const initialLetter = ((name || user?.email || 'U').charAt(0) || 'U').toUpperCase();
 
   return (

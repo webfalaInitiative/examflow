@@ -326,16 +326,17 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
       let gradeLetter = '—';
       const finalVal = hasAnyScore ? Math.round(totalCombined * 10) / 10 : null;
       if (finalVal != null) {
-        if (finalVal >= 80) gradeLetter = 'A';
-        else if (finalVal >= 70) gradeLetter = 'B';
-        else if (finalVal >= 60) gradeLetter = 'C';
-        else if (finalVal >= 50) gradeLetter = 'D';
+        if (finalVal >= 70) gradeLetter = 'A';
+        else if (finalVal >= 60) gradeLetter = 'B';
+        else if (finalVal >= 50) gradeLetter = 'C';
+        else if (finalVal >= 40) gradeLetter = 'D';
+        else if (finalVal >= 30) gradeLetter = 'E';
         else gradeLetter = 'F';
       }
 
       let status = 'Incomplete';
       if (hasAllScores && finalVal != null) {
-        status = finalVal >= 50 ? 'Passed' : 'Failed';
+        status = finalVal >= 40 ? 'Passed' : 'Failed';
       } else if (hasAnyScore) {
         status = 'In Progress';
       }
@@ -465,16 +466,17 @@ router.get('/combine-results/my-summary', verifyToken, async (req, res, next) =>
       let gradeLetter = '—';
       const finalVal = hasAnyScore ? Math.round(totalCombined * 10) / 10 : null;
       if (finalVal != null) {
-        if (finalVal >= 80) gradeLetter = 'A';
-        else if (finalVal >= 70) gradeLetter = 'B';
-        else if (finalVal >= 60) gradeLetter = 'C';
-        else if (finalVal >= 50) gradeLetter = 'D';
+        if (finalVal >= 70) gradeLetter = 'A';
+        else if (finalVal >= 60) gradeLetter = 'B';
+        else if (finalVal >= 50) gradeLetter = 'C';
+        else if (finalVal >= 40) gradeLetter = 'D';
+        else if (finalVal >= 30) gradeLetter = 'E';
         else gradeLetter = 'F';
       }
 
       let status = 'Incomplete';
       if (hasAllScores && finalVal != null) {
-        status = finalVal >= 50 ? 'Passed' : 'Failed';
+        status = finalVal >= 40 ? 'Passed' : 'Failed';
       } else if (hasAnyScore) {
         status = 'In Progress';
       }
@@ -772,7 +774,7 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
         let status = 'Pending';
         if (a.examSubmittedAt) {
           if (gradingComplete && finalPercent != null) {
-            status = finalPercent >= 50 ? 'Passed' : 'Failed';
+            status = finalPercent >= 40 ? 'Passed' : 'Failed';
           } else {
             status = 'Pending';
           }
