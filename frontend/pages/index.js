@@ -156,13 +156,6 @@ function StudentDashboard({ user, submissions, questions }) {
             <div className="stat-value">{submissions.length}</div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-icon orange">📈</div>
-          <div>
-            <div className="stat-label">Avg Score</div>
-            <div className="stat-value">{avgScore != null ? (avgScore * 100).toFixed(0) + '%' : '–'}</div>
-          </div>
-        </div>
       </div>
 
       {assignedExams.length > 0 && (

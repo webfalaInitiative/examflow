@@ -92,8 +92,8 @@ export default function MyResultsPage() {
       const testPub = group.testItem && group.testItem.resultsPublished && group.testItem.scaledScore != null;
       const examPub = group.examItem && group.examItem.resultsPublished && group.examItem.scaledScore != null;
 
-      const testVal = testPub ? `${group.testItem.scaledScore.toFixed(1)} / ${group.testItem.maxScale || 30}%` : '—';
-      const examVal = examPub ? `${group.examItem.scaledScore.toFixed(1)} / ${group.examItem.maxScale || 70}%` : '—';
+      const testVal = testPub ? `${group.testItem.scaledScore.toFixed(1)}` : '—';
+      const examVal = examPub ? `${group.examItem.scaledScore.toFixed(1)}` : '—';
 
       let finalVal = '—';
       let gradeVal = '—';
@@ -139,13 +139,6 @@ export default function MyResultsPage() {
             <div>
               <div className="stat-label">Exams Taken</div>
               <div className="stat-value">{examsTaken}</div>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-icon blue">📊</div>
-            <div>
-              <div className="stat-label">Average Score</div>
-              <div className="stat-value">{avgScore !== null ? avgScore.toFixed(0) + '%' : '–'}</div>
             </div>
           </div>
           <div className="stat-card">
