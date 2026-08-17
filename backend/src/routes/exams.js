@@ -85,18 +85,45 @@ router.get('/', verifyToken, async (req, res, next) => {
 // Create exam (folder)
 router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
-    const { title, description, duration } = req.body;
+    const { title, description, duration, subject, category, maxScale } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
 
     const exam = await prisma.exam.create({
       data: {
         title,
         description,
+        subject: subject || null,
+        category: category || 'TEST',
+        maxScale: maxScale != null ? parseFloat(maxScale) : 100,
         duration: duration ? parseInt(duration) : null,
         createdBy: req.user.sub
       }
     });
     res.status(201).json(exam);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update exam folder settings (title, description, duration, subject, category, maxScale)
+router.patch('/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const examId = parseInt(req.params.id);
+    const { title, description, duration, subject, category, maxScale } = req.body;
+
+    const data = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (duration !== undefined) data.duration = duration ? parseInt(duration) : null;
+    if (subject !== undefined) data.subject = subject || null;
+    if (category !== undefined) data.category = category;
+    if (maxScale !== undefined) data.maxScale = parseFloat(maxScale);
+
+    const exam = await prisma.exam.update({
+      where: { id: examId },
+      data,
+    });
+    res.json(exam);
   } catch (err) {
     next(err);
   }
@@ -218,6 +245,8 @@ async function getExamScoreboardData(examId) {
         }
       }
 
+      const scaledScore = finalPercent != null ? Math.round(((finalPercent / 100) * (exam.maxScale || 100)) * 10) / 10 : null;
+
       return {
         user,
         assignment: {
@@ -227,6 +256,10 @@ async function getExamScoreboardData(examId) {
         mcqPercent,
         theoryPercent,
         finalPercent,
+        scaledScore,
+        maxScale: exam.maxScale || 100,
+        category: exam.category || 'TEST',
+        subject: exam.subject || null,
         gradingComplete,
         answeredCount: subs.length,
         questionCount: n,
@@ -782,15 +815,24 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
           status = 'Incomplete';
         }
 
+        const maxScale = exam.maxScale || 100;
+        const category = exam.category || 'TEST';
+        const subject = exam.subject || null;
+        const scaledScore = finalPercent != null ? Math.round(((finalPercent / 100) * maxScale) * 10) / 10 : null;
+
         return {
           examId,
           title: exam.title,
           description: exam.description,
+          subject,
+          category,
+          maxScale,
           examSubmittedAt: a.examSubmittedAt,
           resultsPublished: true,
           mcqPercent,
           theoryPercent,
           finalPercent,
+          scaledScore,
           status,
           nQuestions: exam.questions.length,
         };

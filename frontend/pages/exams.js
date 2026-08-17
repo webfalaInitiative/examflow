@@ -17,7 +17,7 @@ export default function ExamsPage() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   
   const [currentExam, setCurrentExam] = useState(null);
-  const [examForm, setExamForm] = useState({ title: '', description: '', duration: '' });
+  const [examForm, setExamForm] = useState({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30 });
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   
@@ -72,13 +72,13 @@ export default function ExamsPage() {
     setSaving(true);
     try {
       if (currentExam) {
-        await api.put(`/exams/${currentExam.id}`, examForm);
+        await api.patch(`/exams/${currentExam.id}`, examForm);
       } else {
         await api.post('/exams', examForm);
       }
       setShowExamModal(false);
       loadExams();
-      setExamForm({ title: '', description: '', duration: '' });
+      setExamForm({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30 });
       setCurrentExam(null);
     } catch (err) {
       const message = err.response?.data?.error || err.message || 'Failed to save exam';
@@ -216,7 +216,7 @@ export default function ExamsPage() {
                     <button className="btn-sm btn-outline" onClick={() => openManageQuestions(exam)}>Questions</button>
                     <button className="btn-sm btn-outline" onClick={() => openAssign(exam)}>Assign</button>
                     <Link href={`/exams/${exam.id}/grading`} className="btn-sm btn-outline">Grading / publish</Link>
-                    <button className="btn-sm btn-outline" onClick={() => { setExamForm({ title: exam.title, description: exam.description, duration: exam.duration || '' }); setCurrentExam(exam); setShowExamModal(true); }}>Edit</button>
+                    <button className="btn-sm btn-outline" onClick={() => { setExamForm({ title: exam.title, description: exam.description, duration: exam.duration || '', subject: exam.subject || '', category: exam.category || 'TEST', maxScale: exam.maxScale || 30 }); setCurrentExam(exam); setShowExamModal(true); }}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => deleteExam(exam.id)}>Delete</button>
                   </div>
                 ) : (
@@ -238,7 +238,41 @@ export default function ExamsPage() {
             <form onSubmit={handleCreateOrUpdateExam}>
               <div className="form-row">
                 <label>Folder Title</label>
-                <input type="text" value={examForm.title} onChange={e => setExamForm({ ...examForm, title: e.target.value })} placeholder="e.g. Midterm Physics" />
+                <input type="text" value={examForm.title} onChange={e => setExamForm({ ...examForm, title: e.target.value })} placeholder="e.g. Mathematics Test 1" />
+              </div>
+              <div className="form-row">
+                <label>Subject / Course Name (Optional)</label>
+                <input type="text" value={examForm.subject} onChange={e => setExamForm({ ...examForm, subject: e.target.value })} placeholder="e.g. Mathematics or Physics" />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-row">
+                  <label>Folder Type</label>
+                  <select
+                    value={examForm.category}
+                    onChange={e => {
+                      const cat = e.target.value;
+                      const scale = cat === 'TEST' ? 30 : cat === 'EXAM' ? 70 : 100;
+                      setExamForm({ ...examForm, category: cat, maxScale: scale });
+                    }}
+                    style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }}
+                  >
+                    <option value="TEST">Test (e.g. 30%)</option>
+                    <option value="EXAM">Exam (e.g. 70%)</option>
+                    <option value="GENERAL">General (100%)</option>
+                  </select>
+                </div>
+                <div className="form-row">
+                  <label>Target Scale / Max Score (%)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={examForm.maxScale}
+                    onChange={e => setExamForm({ ...examForm, maxScale: parseFloat(e.target.value) || 100 })}
+                    placeholder="e.g. 30, 70, 100"
+                    required
+                  />
+                </div>
               </div>
               <div className="form-row">
                 <label>Description</label>

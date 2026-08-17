@@ -69,6 +69,9 @@ model Exam {
   id          Int       @id @default(autoincrement())
   title       String
   description String?
+  subject     String?
+  category    String    @default("TEST") // "TEST" | "EXAM" | "GENERAL"
+  maxScale    Float     @default(100) // e.g. 30 for 30%, 70 for 70%, 100 for 100%
   duration    Int? // duration in minutes
   createdBy   Int
   createdAt   DateTime  @default(now())

@@ -148,6 +148,17 @@ export default function ExamGradingPage() {
     document.body.removeChild(link);
   };
 
+  const updateFolderScale = async (newCategory, newMaxScale) => {
+    try {
+      const res = await api.patch(`/exams/${id}`, { category: newCategory, maxScale: parseFloat(newMaxScale) || 100 });
+      setExam(res.data);
+      load();
+      setMsg(`Target Scale updated to ${res.data.maxScale}% (${res.data.category}).`);
+    } catch {
+      setMsg('Failed to update scale settings.');
+    }
+  };
+
   return (
     <RequireAuth>
       <DashboardLayout>
@@ -155,8 +166,7 @@ export default function ExamGradingPage() {
           <div>
             <h1>{exam ? `Grading / Publish: ${exam.title}` : 'Grading'}</h1>
             <p>
-              Theory marks are optional 0–100. If set, they average with MCQ %. Leave blank if unused. Or
-              enter an external theory paper mark; it blends with MCQ as one extra weighted part. <strong>Final / 100</strong> updates here; superadmin publishes when ready.
+              Theory marks are optional 0–100. If set, they average with MCQ %. Target Scale / Max Score (e.g. <strong>30% for Test</strong> or <strong>70% for Exam</strong>) converts final raw % to the target folder percentage.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -199,7 +209,7 @@ export default function ExamGradingPage() {
         {msg && (
           <p
             className={
-              msg === 'Theory score saved.' || msg.startsWith('Results published') || msg.startsWith('Results unpublished') ? 'helper' : 'error'
+              msg === 'Theory score saved.' || msg.startsWith('Results published') || msg.startsWith('Results unpublished') || msg.startsWith('Target Scale updated') ? 'helper' : 'error'
             }
             style={{ marginBottom: 12 }}
           >
@@ -213,7 +223,26 @@ export default function ExamGradingPage() {
           scoreboard && (
             <div className="panel">
               <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <h2>Scoreboard (per student)</h2>
+                <div>
+                  <h2>Scoreboard (per student)</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: '#4b5563', fontWeight: 600 }}>Folder Target Scale:</span>
+                    <select
+                      value={exam?.category || 'TEST'}
+                      onChange={(e) => {
+                        const cat = e.target.value;
+                        const scale = cat === 'TEST' ? 30 : cat === 'EXAM' ? 70 : 100;
+                        updateFolderScale(cat, scale);
+                      }}
+                      style={{ padding: '2px 8px', borderRadius: 6, fontSize: 13, border: '1px solid #cbd5e1' }}
+                    >
+                      <option value="TEST">Test (30%)</option>
+                      <option value="EXAM">Exam (70%)</option>
+                      <option value="GENERAL">General (100%)</option>
+                    </select>
+                    <span style={{ fontSize: 13, color: '#4b5563' }}>Max: <strong>{exam?.maxScale || 100}%</strong></span>
+                  </div>
+                </div>
                 <button type="button" className="btn-sm btn-outline" onClick={exportCSV}>
                   📥 Export Exam Results to CSV
                 </button>
@@ -226,7 +255,8 @@ export default function ExamGradingPage() {
                       <th>Matric No.</th>
                       <th>MCQ %</th>
                       <th>Theory (0–100)</th>
-                      <th>Final / 100</th>
+                      <th>Raw %</th>
+                      <th>Scaled Score (out of {exam?.maxScale || 100}%)</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -277,7 +307,12 @@ export default function ExamGradingPage() {
                           )}
                         </td>
                         <td>
-                          <strong>{row.finalPercent != null ? row.finalPercent.toFixed(1) : '—'}</strong>
+                          {row.finalPercent != null ? `${row.finalPercent.toFixed(1)}%` : '—'}
+                        </td>
+                        <td>
+                          <strong style={{ color: 'var(--primary, #4338ca)', fontSize: 15 }}>
+                            {row.scaledScore != null ? `${row.scaledScore.toFixed(1)} / ${exam?.maxScale || 100}%` : '—'}
+                          </strong>
                         </td>
                         <td>
                           <span className={`badge ${row.gradingComplete ? 'green' : 'orange'}`}>

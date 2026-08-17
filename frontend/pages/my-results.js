@@ -52,12 +52,85 @@ export default function MyResultsPage() {
     }
   };
 
+  // Group results into Subject Academic Breakdown (Test, Exam, Final, Grade)
+  const getSubjectBreakdown = () => {
+    if (examResults.length === 0) return [];
+    const subjectMap = new Map();
+
+    examResults.forEach((r) => {
+      const rawTitle = r.subject || r.title || 'General Course';
+      const subjectName = rawTitle.replace(/\s*-\s*(Test|Exam|Midterm|Final).*/i, '').trim() || rawTitle;
+      if (!subjectMap.has(subjectName)) {
+        subjectMap.set(subjectName, {
+          subject: subjectName,
+          testItem: null,
+          examItem: null,
+          combinedItem: null,
+        });
+      }
+
+      const group = subjectMap.get(subjectName);
+      const isTest = r.category === 'TEST' || (r.maxScale && r.maxScale <= 50) || r.title.toLowerCase().includes('test');
+      if (isTest) {
+        group.testItem = r;
+      } else {
+        group.examItem = r;
+      }
+    });
+
+    // Match combined reports
+    combinedResults.forEach((c) => {
+      const title = (c.title || '').replace(/Combined Assessment Report|Report|Combined/gi, '').trim();
+      for (const [key, group] of subjectMap.entries()) {
+        if (title && (title.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(title.toLowerCase()))) {
+          group.combinedItem = c;
+        }
+      }
+    });
+
+    return Array.from(subjectMap.values()).map((group) => {
+      const testPub = group.testItem && group.testItem.resultsPublished && group.testItem.scaledScore != null;
+      const examPub = group.examItem && group.examItem.resultsPublished && group.examItem.scaledScore != null;
+
+      const testVal = testPub ? `${group.testItem.scaledScore.toFixed(1)} / ${group.testItem.maxScale || 30}%` : '—';
+      const examVal = examPub ? `${group.examItem.scaledScore.toFixed(1)} / ${group.examItem.maxScale || 70}%` : '—';
+
+      let finalVal = '—';
+      let gradeVal = '—';
+
+      if (group.combinedItem && group.combinedItem.totalCombined != null) {
+        finalVal = `${group.combinedItem.totalCombined.toFixed(1)}%`;
+        gradeVal = group.combinedItem.gradeLetter || '—';
+      } else if (testPub && examPub) {
+        const total = (group.testItem.scaledScore || 0) + (group.examItem.scaledScore || 0);
+        finalVal = `${total.toFixed(1)}%`;
+        if (total >= 70) gradeVal = 'A';
+        else if (total >= 60) gradeVal = 'B';
+        else if (total >= 50) gradeVal = 'C';
+        else if (total >= 40) gradeVal = 'D';
+        else if (total >= 30) gradeVal = 'E';
+        else gradeVal = 'F';
+      }
+
+      return {
+        subject: group.subject,
+        testVal,
+        examVal,
+        finalVal,
+        gradeVal,
+        isFullyPublished: (testPub && examPub) || Boolean(group.combinedItem),
+      };
+    });
+  };
+
+  const subjectRows = getSubjectBreakdown();
+
   return (
     <RequireAuth>
       <DashboardLayout>
         <div className="page-header">
           <h1>My Results 📈</h1>
-          <p>Track your exam performance</p>
+          <p>Track your academic test and exam performance</p>
         </div>
 
         <div className="stats-grid">
@@ -81,6 +154,65 @@ export default function MyResultsPage() {
               <div className="stat-label">Pending Release</div>
               <div className="stat-value">{pendingRelease}</div>
             </div>
+          </div>
+        </div>
+
+        {/* Structured Subject Breakdown Table (Test, Exam, Final, Grade) */}
+        <div className="panel" style={{ marginBottom: 32 }}>
+          <div className="panel-header" style={{ background: 'linear-gradient(135deg, #1e1b4b, #312e81)', color: '#fff' }}>
+            <h2 style={{ color: '#fff', margin: 0 }}>📊 Subject Academic Performance Breakdown</h2>
+          </div>
+          <div className="panel-body no-pad">
+            {loading ? (
+              <p className="helper" style={{ padding: 20 }}>Loading subject performance…</p>
+            ) : subjectRows.length === 0 ? (
+              <p className="helper" style={{ padding: 20 }}>No subject results published yet.</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th>Subject / Course</th>
+                    <th>Test</th>
+                    <th>Exam</th>
+                    <th>Final</th>
+                    <th>Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectRows.map((row, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <strong>{row.subject}</strong>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: row.testVal !== '—' ? 700 : 400, color: row.testVal !== '—' ? '#0284c7' : '#9ca3af' }}>
+                          {row.testVal}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: row.examVal !== '—' ? 700 : 400, color: row.examVal !== '—' ? '#4f46e5' : '#9ca3af' }}>
+                          {row.examVal}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: row.finalVal !== '—' ? 800 : 400, fontSize: row.finalVal !== '—' ? 16 : 14, color: row.finalVal !== '—' ? '#15803d' : '#9ca3af' }}>
+                          {row.finalVal}
+                        </span>
+                      </td>
+                      <td>
+                        {row.gradeVal !== '—' ? (
+                          <span className="badge blue" style={{ fontWeight: 700, fontSize: 13 }}>
+                            {row.gradeVal}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
