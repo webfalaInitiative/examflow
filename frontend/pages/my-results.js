@@ -216,12 +216,11 @@ export default function MyResultsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                 <div>
                   <h2 style={{ position: 'static', padding: 0, margin: 0 }}>{selectedExam.title}</h2>
-                  <p style={{ color: 'var(--gray-500)', fontSize: 14, marginTop: 4 }}>
-                    MCQ Score: <strong>{selectedExam.mcqPercent !== null ? selectedExam.mcqPercent.toFixed(0) + '%' : '—'}</strong> | 
-                    Theory Score: <strong>{selectedExam.theoryPercent !== null ? selectedExam.theoryPercent.toFixed(0) + '%' : '—'}</strong> | 
-                    Final Grade: <strong style={{ color: selectedExam.finalPercent >= 50 ? 'var(--success-700)' : 'var(--error-700)' }}>
-                      {selectedExam.finalPercent !== null ? selectedExam.finalPercent.toFixed(1) + '%' : '—'}
-                    </strong>
+                  <p style={{ color: 'var(--gray-600)', fontSize: 15, marginTop: 4, fontWeight: 600 }}>
+                    Score:{' '}
+                    <span style={{ color: '#4338ca', fontSize: 16, fontWeight: 800 }}>
+                      {selectedExam.scaledScore != null ? selectedExam.scaledScore.toFixed(1) : selectedExam.finalPercent != null ? selectedExam.finalPercent.toFixed(1) : '—'}
+                    </span>
                   </p>
                 </div>
                 <button 
@@ -240,7 +239,7 @@ export default function MyResultsPage() {
                       <th>Question</th>
                       <th>Type</th>
                       <th>Your Answer</th>
-                      <th>Score</th>
+                      <th>Mark</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -270,7 +269,7 @@ export default function MyResultsPage() {
                             </div>
                           </td>
                           <td>
-                            {s.score !== null ? (s.score * 100).toFixed(0) + '%' : '—'}
+                            {s.score !== null ? (s.score > 0 ? '1 pt' : '0 pt') : '—'}
                           </td>
                           <td>
                             <span className={`badge ${s.graded ? 'green' : 'orange'}`}>
@@ -523,9 +522,7 @@ export default function MyResultsPage() {
                   <tr>
                     <th>Folder / Exam</th>
                     <th>Questions</th>
-                    <th>MCQ %</th>
-                    <th>Theory %</th>
-                    <th>Final Score</th>
+                    <th>Score</th>
                     <th>Status</th>
                     <th>Submitted</th>
                     <th>Actions</th>
@@ -534,6 +531,7 @@ export default function MyResultsPage() {
                 <tbody>
                   {examResults.map((r) => {
                     const isPublished = r.resultsPublished && r.examSubmittedAt !== null;
+                    const displayScore = r.scaledScore != null ? r.scaledScore.toFixed(1) : (r.finalPercent != null ? r.finalPercent.toFixed(1) : '—');
                     return (
                       <tr key={r.examId}>
                         <td>
@@ -546,15 +544,9 @@ export default function MyResultsPage() {
                         </td>
                         <td>{r.nQuestions}</td>
                         <td>
-                          {isPublished && r.mcqPercent !== null ? r.mcqPercent.toFixed(0) + '%' : '—'}
-                        </td>
-                        <td>
-                          {isPublished && r.theoryPercent !== null ? r.theoryPercent.toFixed(0) + '%' : '—'}
-                        </td>
-                        <td>
-                          {isPublished && r.finalPercent !== null ? (
-                            <strong style={{ color: r.finalPercent >= 50 ? 'var(--success-700)' : 'var(--error-700)' }}>
-                              {r.finalPercent.toFixed(1)}%
+                          {isPublished && displayScore !== '—' ? (
+                            <strong style={{ color: '#4338ca', fontSize: 15 }}>
+                              {displayScore}
                             </strong>
                           ) : '—'}
                         </td>
