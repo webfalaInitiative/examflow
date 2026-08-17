@@ -40,7 +40,8 @@ export default function GradingPublishOverviewPage() {
         return;
       }
 
-      const headers = ['Student Name', 'Matric Number', 'Email', 'MCQ Score (%)', 'Theory Score (%)', 'Final Score (%)', 'Status'];
+      const maxScale = scoreboard.exam?.maxScale || scoreboard.maxScale || 100;
+      const headers = ['Student Name', 'Matric Number', 'Email', 'MCQ Score (%)', 'Theory Score (%)', 'Final Raw (%)', `Scaled Score (out of ${maxScale}%)`, 'Status'];
       const csvLines = [headers.join(',')];
 
       scoreboard.rows.forEach((row) => {
@@ -51,6 +52,7 @@ export default function GradingPublishOverviewPage() {
           row.mcqPercent != null ? `${row.mcqPercent.toFixed(1)}%` : '—',
           row.theoryPercent != null ? `${row.theoryPercent.toFixed(1)}%` : '—',
           row.finalPercent != null ? `${row.finalPercent.toFixed(1)}%` : '—',
+          row.scaledScore != null ? `${row.scaledScore.toFixed(1)} / ${maxScale}%` : '—',
           `"${row.gradingComplete ? (row.finalPercent >= 40 ? 'Passed' : 'Failed') : 'Pending'}"`,
         ];
         csvLines.push(line.join(','));
