@@ -20,6 +20,7 @@ function DashboardHome() {
   const [questions, setQuestions] = useState([]);
 
   useEffect(() => {
+    if (!user) return;
     const isAdmin = user.role === 'OWNER' || user.role === 'ADMIN';
 
     if (isAdmin) {
@@ -31,12 +32,12 @@ function DashboardHome() {
     }
   }, [user]);
 
-  const isAdmin = user.role === 'OWNER' || user.role === 'ADMIN';
+  const isAdmin = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
   return (
     <DashboardLayout>
       <div className="page-header">
-        <h1>Welcome back, {user.name || 'User'} 👋</h1>
+        <h1>Welcome back, {user?.name || 'User'} 👋</h1>
         <p>{isAdmin ? 'Here\'s an overview of your exam platform.' : 'Ready to take your next assessment?'}</p>
       </div>
 

@@ -17,7 +17,7 @@ export default function ExamsPage() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   
   const [currentExam, setCurrentExam] = useState(null);
-  const [examForm, setExamForm] = useState({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30 });
+  const [examForm, setExamForm] = useState({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30, isManual: false, autoAssignAll: false });
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   
@@ -78,7 +78,7 @@ export default function ExamsPage() {
       }
       setShowExamModal(false);
       loadExams();
-      setExamForm({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30 });
+      setExamForm({ title: '', description: '', duration: '', subject: '', category: 'TEST', maxScale: 30, isManual: false, autoAssignAll: false });
       setCurrentExam(null);
     } catch (err) {
       const message = err.response?.data?.error || err.message || 'Failed to save exam';
@@ -216,9 +216,13 @@ export default function ExamsPage() {
                     <button className="btn-sm btn-outline" onClick={() => openManageQuestions(exam)}>Questions</button>
                     <button className="btn-sm btn-outline" onClick={() => openAssign(exam)}>Assign</button>
                     <Link href={`/exams/${exam.id}/grading`} className="btn-sm btn-outline">Grading / publish</Link>
-                    <button className="btn-sm btn-outline" onClick={() => { setExamForm({ title: exam.title, description: exam.description, duration: exam.duration || '', subject: exam.subject || '', category: exam.category || 'TEST', maxScale: exam.maxScale || 30 }); setCurrentExam(exam); setShowExamModal(true); }}>Edit</button>
+                    <button className="btn-sm btn-outline" onClick={() => { setExamForm({ title: exam.title, description: exam.description, duration: exam.duration || '', subject: exam.subject || '', category: exam.category || 'TEST', maxScale: exam.maxScale || 30, isManual: Boolean(exam.isManual), autoAssignAll: false }); setCurrentExam(exam); setShowExamModal(true); }}>Edit</button>
                     <button className="btn-sm btn-danger" onClick={() => deleteExam(exam.id)}>Delete</button>
                   </div>
+                ) : exam.isManual ? (
+                  <span className="badge blue" style={{ padding: '6px 12px', fontSize: 13, fontWeight: 600 }}>
+                    📝 Graded by Instructor
+                  </span>
                 ) : (
                   <Link href={`/exam?examId=${exam.id}`} className="btn-sm btn-primary">
                     Start Exam
@@ -274,6 +278,33 @@ export default function ExamsPage() {
                   />
                 </div>
               </div>
+
+              <div className="form-row" style={{ marginTop: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(examForm.isManual)}
+                    onChange={e => setExamForm({ ...examForm, isManual: e.target.checked })}
+                    style={{ width: 18, height: 18 }}
+                  />
+                  <span>Manual Score Entry Folder (Scores entered manually on Scoreboard)</span>
+                </label>
+              </div>
+
+              {!currentExam && examForm.isManual && (
+                <div className="form-row" style={{ marginTop: 8, marginLeft: 26 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#4b5563' }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(examForm.autoAssignAll)}
+                      onChange={e => setExamForm({ ...examForm, autoAssignAll: e.target.checked })}
+                      style={{ width: 16, height: 16 }}
+                    />
+                    <span>Automatically populate all active candidates to this folder</span>
+                  </label>
+                </div>
+              )}
+
               <div className="form-row">
                 <label>Description</label>
                 <textarea value={examForm.description} onChange={e => setExamForm({ ...examForm, description: e.target.value })} placeholder="Short description..." />

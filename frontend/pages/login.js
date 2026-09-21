@@ -1,6 +1,6 @@
-// Login page — no demo accounts, production-ready
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
 
 import WebfalaLogo from '../components/WebfalaLogo';
@@ -88,7 +88,7 @@ export default function Login() {
 
           <div className="form-actions">
             <button type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
-            <a className="small-link" href="/register">Register</a>
+            <Link className="small-link" href="/register">Register</Link>
           </div>
         </form>
 

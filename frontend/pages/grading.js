@@ -11,6 +11,20 @@ export default function GradingPublishOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Manual folder creation modal state
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualForm, setManualForm] = useState({
+    title: '',
+    subject: '',
+    category: 'TEST',
+    maxScale: 30,
+    description: '',
+    autoAssignAll: true,
+  });
+  const [savingManual, setSavingManual] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
   useEffect(() => {
     if (!user) return;
     loadExams();
@@ -30,6 +44,46 @@ export default function GradingPublishOverviewPage() {
   };
 
   const isAdmin = user?.role === 'OWNER' || user?.role === 'ADMIN';
+
+  const handleCreateManualFolder = async (e) => {
+    e.preventDefault();
+    if (!manualForm.title.trim()) {
+      setFormError('Folder Title is required');
+      return;
+    }
+
+    setSavingManual(true);
+    setFormError('');
+    try {
+      const payload = {
+        title: manualForm.title.trim(),
+        subject: manualForm.subject.trim() || null,
+        category: manualForm.category,
+        maxScale: parseFloat(manualForm.maxScale) || 100,
+        description: manualForm.description.trim() || null,
+        isManual: true,
+        autoAssignAll: manualForm.autoAssignAll,
+      };
+
+      await api.post('/exams', payload);
+      setShowManualModal(false);
+      setManualForm({
+        title: '',
+        subject: '',
+        category: 'TEST',
+        maxScale: 30,
+        description: '',
+        autoAssignAll: true,
+      });
+      setSuccessMsg(`Manual score entry folder "${payload.title}" created successfully!`);
+      setTimeout(() => setSuccessMsg(''), 6000);
+      loadExams();
+    } catch (err) {
+      setFormError(err.response?.data?.error || 'Failed to create manual exam folder');
+    } finally {
+      setSavingManual(false);
+    }
+  };
 
   const downloadExamCSV = async (examId, examTitle) => {
     try {
@@ -77,9 +131,25 @@ export default function GradingPublishOverviewPage() {
         <div className="page-header flex-header">
           <div>
             <h1>Grading / Publish</h1>
-            <p>Select an exam folder below to manage student grades, theory scores, and publish results.</p>
+            <p>Manage student grades, manual MCQ & theory scores, publish results, and merge multi-folder assessments.</p>
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => { setFormError(''); setShowManualModal(true); }}
+                style={{
+                  background: 'linear-gradient(135deg, #4338ca, #6366f1)',
+                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span>➕</span> Create Manual Score Folder
+              </button>
+            )}
             <Link href="/grading/combine" className="btn-primary" style={{ background: 'linear-gradient(135deg, #027a48, #12b76a)' }}>
               🔗 Combine / Merge Exam Results
             </Link>
@@ -88,6 +158,12 @@ export default function GradingPublishOverviewPage() {
             </Link>
           </div>
         </div>
+
+        {successMsg && (
+          <div style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', padding: '12px 16px', borderRadius: 8, marginBottom: 20, fontWeight: 500 }}>
+            {successMsg}
+          </div>
+        )}
 
         {error && <div className="alert alert-error" style={{ marginBottom: 20 }}>{error}</div>}
 
@@ -102,12 +178,18 @@ export default function GradingPublishOverviewPage() {
               <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
                 <div className="empty-icon">📁</div>
                 <p>No exam folders found</p>
-                <Link href="/exams" className="btn-primary" style={{ marginTop: 12 }}>
-                  Create Exam Folder
-                </Link>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12 }}>
+                  <button type="button" className="btn-primary" onClick={() => setShowManualModal(true)}>
+                    + Create Manual Entry Folder
+                  </button>
+                  <Link href="/exams" className="btn-outline">
+                    Create Online Exam
+                  </Link>
+                </div>
               </div>
             ) : (
               exams.map((exam) => {
+                const isManual = Boolean(exam.isManual);
                 const questionCount = exam._count?.questions ?? exam.questions?.length ?? 0;
                 const assignedCount = (exam._count?.assignments ?? exam.assignments?.length) ?? 0;
                 const isPublished = exam.resultsPublished;
@@ -116,22 +198,47 @@ export default function GradingPublishOverviewPage() {
                 return (
                   <div key={exam.id} className="exam-card panel">
                     <div className="exam-card-content">
-                      <div className="exam-card-icon">📊</div>
+                      <div className="exam-card-icon">{isManual ? '📝' : '📊'}</div>
                       <div className="exam-card-info">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                          <h3>{exam.title}</h3>
-                          <span className={`badge ${isPublished ? 'green' : isRequested ? 'orange' : 'gray'}`} style={{ whiteSpace: 'nowrap' }}>
-                            {isPublished ? 'Published' : isRequested ? '⏳ Publish Requested' : 'Draft'}
-                          </span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                          <h3 style={{ margin: 0 }}>{exam.title}</h3>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            {isManual && (
+                              <span className="badge blue" style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 8px' }}>
+                                📝 Manual Entry
+                              </span>
+                            )}
+                            <span className={`badge ${isPublished ? 'green' : isRequested ? 'orange' : 'gray'}`} style={{ whiteSpace: 'nowrap' }}>
+                              {isPublished ? 'Published' : isRequested ? '⏳ Publish Requested' : 'Draft'}
+                            </span>
+                          </div>
                         </div>
-                        <p>{exam.description || 'No description provided'}</p>
-                        <div className="exam-stats" style={{ marginTop: 12 }}>
-                          <span>{questionCount} Questions</span>
-                          {exam.duration && <span>• {exam.duration} Min</span>}
+
+                        {exam.subject && (
+                          <div style={{ fontSize: 13, color: '#4f46e5', fontWeight: 600, marginTop: 4 }}>
+                            Course: {exam.subject}
+                          </div>
+                        )}
+
+                        <p style={{ marginTop: 6, color: '#6b7280', fontSize: 14 }}>{exam.description || 'No description provided'}</p>
+
+                        <div className="exam-stats" style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {isManual ? (
+                            <span style={{ fontWeight: 600, color: '#047857' }}>
+                              🎯 Target Scale: {exam.maxScale || 100}% ({exam.category || 'TEST'})
+                            </span>
+                          ) : (
+                            <>
+                              <span>{questionCount} Questions</span>
+                              {exam.duration && <span>• {exam.duration} Min</span>}
+                              <span>• Target Scale: {exam.maxScale || 100}%</span>
+                            </>
+                          )}
                           {isAdmin && <span>• {assignedCount} Assigned Students</span>}
                         </div>
                       </div>
                     </div>
+
                     <div className="exam-card-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingTop: 12 }}>
                       <Link
                         href={`/exams/${exam.id}/grading`}
@@ -149,7 +256,7 @@ export default function GradingPublishOverviewPage() {
                           boxShadow: '0 2px 6px rgba(29, 85, 234, 0.25)',
                         }}
                       >
-                        Grading / publish →
+                        {isManual ? 'Input Scores / Publish →' : 'Grading / publish →'}
                       </Link>
                       <button
                         type="button"
@@ -164,6 +271,118 @@ export default function GradingPublishOverviewPage() {
                 );
               })
             )}
+          </div>
+        )}
+
+        {/* Create Manual Entry Folder Modal */}
+        {showManualModal && (
+          <div className="modal-overlay" onClick={() => setShowManualModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 style={{ margin: 0, fontSize: 20 }}>📝 Create Manual Score Entry Folder</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 20 }}>
+                Create an exam folder where instructors manually enter both <strong>MCQ and Theory scores (0–100%)</strong> for candidates (e.g. offline tests, paper exams, or practicals). This folder can be published and merged into combined assessment reports.
+              </p>
+
+              <form onSubmit={handleCreateManualFolder}>
+                <div className="form-row">
+                  <label>Folder Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={manualForm.title}
+                    onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })}
+                    placeholder="e.g. First Term Mathematics Test (Paper)"
+                  />
+                </div>
+
+                <div className="form-row">
+                  <label>Subject / Course Name (Optional)</label>
+                  <input
+                    type="text"
+                    value={manualForm.subject}
+                    onChange={(e) => setManualForm({ ...manualForm, subject: e.target.value })}
+                    placeholder="e.g. Mathematics or English Language"
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-row">
+                    <label>Folder Type</label>
+                    <select
+                      value={manualForm.category}
+                      onChange={(e) => {
+                        const cat = e.target.value;
+                        const scale = cat === 'TEST' ? 30 : cat === 'EXAM' ? 70 : 100;
+                        setManualForm({ ...manualForm, category: cat, maxScale: scale });
+                      }}
+                      style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }}
+                    >
+                      <option value="TEST">Test (30% scale)</option>
+                      <option value="EXAM">Exam (70% scale)</option>
+                      <option value="GENERAL">General Assessment (100%)</option>
+                    </select>
+                  </div>
+                  <div className="form-row">
+                    <label>Target Scale / Max Score (%)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={manualForm.maxScale}
+                      onChange={(e) => setManualForm({ ...manualForm, maxScale: parseFloat(e.target.value) || 100 })}
+                      placeholder="e.g. 30, 70, 100"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <label>Description (Optional)</label>
+                  <textarea
+                    rows={2}
+                    value={manualForm.description}
+                    onChange={(e) => setManualForm({ ...manualForm, description: e.target.value })}
+                    placeholder="e.g. In-person assessment conducted on October 15"
+                  />
+                </div>
+
+                <div className="form-row" style={{ marginTop: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 500 }}>
+                    <input
+                      type="checkbox"
+                      checked={manualForm.autoAssignAll}
+                      onChange={(e) => setManualForm({ ...manualForm, autoAssignAll: e.target.checked })}
+                      style={{ width: 18, height: 18 }}
+                    />
+                    <span>Automatically populate all active candidates to this folder</span>
+                  </label>
+                  <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 26, display: 'block' }}>
+                    All active students will immediately appear on the scoreboard so you can input their scores directly.
+                  </span>
+                </div>
+
+                {formError && <p className="error" style={{ marginTop: 12 }}>{formError}</p>}
+
+                <div className="modal-actions" style={{ marginTop: 24 }}>
+                  <button type="button" className="secondary" onClick={() => setShowManualModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={savingManual} className="btn-primary">
+                    {savingManual ? 'Creating Folder…' : 'Create Manual Entry Folder'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </DashboardLayout>

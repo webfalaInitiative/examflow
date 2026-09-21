@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import RequireAuth from '../../components/RequireAuth';
+import StatementOfResult, { getStatementGrade, formatStatementDate } from '../../components/StatementOfResult';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../lib/api';
 
@@ -19,11 +20,14 @@ export default function CombineResultsPage() {
   const [report, setReport] = useState(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [error, setError] = useState('');
-  const [reportTitle, setReportTitle] = useState('First Term Combined Assessment Report');
+  const [reportTitle, setReportTitle] = useState('Women in AI Fellowship 2025');
+  const [directorName, setDirectorName] = useState('Bakare Nafisat Opeyemi');
+  const [issueDate, setIssueDate] = useState('9th September, 2025');
   const [publishing, setPublishing] = useState(false);
   const [publishedNotice, setPublishedNotice] = useState('');
   const [publishedReports, setPublishedReports] = useState([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
+  const [selectedStudentForStatement, setSelectedStudentForStatement] = useState(null);
 
   const isStaff = user?.role === 'OWNER' || user?.role === 'ADMIN';
 
@@ -147,9 +151,11 @@ export default function CombineResultsPage() {
         title: reportTitle.trim() || 'Combined Assessment Report',
         description: `Combined score report for ${validItems.length} exam folders`,
         items: itemsPayload,
+        issueDate: issueDate.trim() || '9th September, 2025',
+        directorName: directorName.trim() || 'Bakare Nafisat Opeyemi',
       });
 
-      setPublishedNotice(`✅ Combined report "${reportTitle.trim()}" published successfully! Students can now view their combined results and download official PDF transcripts on their dashboard.`);
+      setPublishedNotice(`✅ Combined report "${reportTitle.trim()}" published successfully! Students can now view their official Statement of Result with fixed date "${issueDate.trim()}" on their dashboard.`);
       fetchPublishedReports();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to publish combined report.');
@@ -222,7 +228,7 @@ export default function CombineResultsPage() {
           <div>
             <h1>🔗 Combine & Merge Exam Results</h1>
             <p>
-              Merge student assessment scores across multiple exam folders (e.g. <strong>Midterm Test (30%)</strong> + <strong>Final Examination (70%)</strong>) with custom weightings and publish to student dashboards.
+              Merge student assessment scores across multiple exam folders (e.g. <strong>Python</strong>, <strong>SQL</strong>, <strong>Mathematics</strong>, <strong>Soft Skills</strong>) and generate official <strong>Statements of Result</strong>.
             </p>
           </div>
           <Link href="/grading" className="btn-outline">
@@ -239,26 +245,57 @@ export default function CombineResultsPage() {
 
         <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-header">
-            <h2>Select Folders, Assign Weights & Publish</h2>
+            <h2>Select Folders, Assign Weights & Configure Statement Details</h2>
           </div>
           <div className="panel-body">
             {loadingExams ? (
               <p className="helper">Loading exam folders…</p>
             ) : (
               <form onSubmit={(e) => { e.preventDefault(); generateReport(); }}>
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>
-                    Report Title (visible on student dashboard & PDF transcript):
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={reportTitle}
-                    onChange={(e) => setReportTitle(e.target.value)}
-                    placeholder="e.g. First Term Combined Assessment Report"
-                    required
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 15 }}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>
+                      Program / Fellowship Name:
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={reportTitle}
+                      onChange={(e) => setReportTitle(e.target.value)}
+                      placeholder="e.g. Women in AI Fellowship 2025"
+                      required
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 15 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>
+                      Executive Director Name (Signature):
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={directorName}
+                      onChange={(e) => setDirectorName(e.target.value)}
+                      placeholder="e.g. Bakare Nafisat Opeyemi"
+                      required
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 15 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>
+                      Issued Date (Fixed on Statement):
+                    </label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)}
+                      placeholder="e.g. 9th September, 2025"
+                      required
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 15 }}
+                      title="Editable fixed date that will appear on the printed Statement of Result"
+                    />
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
@@ -286,7 +323,7 @@ export default function CombineResultsPage() {
                         <option value="">-- Select Exam Folder --</option>
                         {exams.map((e) => (
                           <option key={e.id} value={e.id}>
-                            {e.title} ({e._count?.questions ?? 0} Questions, {e._count?.assignments ?? 0} Students)
+                            {e.isManual ? '📝 [Manual] ' : ''}{e.title} {e.isManual ? `(Scale: ${e.maxScale || 100}%)` : `(${e._count?.questions ?? 0} Questions, ${e._count?.assignments ?? 0} Students)`}
                           </option>
                         ))}
                       </select>
@@ -370,7 +407,7 @@ export default function CombineResultsPage() {
             <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <h2>Combined Assessment Scoreboard ({report.rows.length} Students)</h2>
-                <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Title: "{reportTitle}"</span>
+                <span style={{ fontSize: 13, color: 'var(--gray-500)' }}>Program: "{reportTitle}"</span>
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 {user?.role === 'OWNER' && (
@@ -407,12 +444,13 @@ export default function CombineResultsPage() {
                     <th>Total Combined Score</th>
                     <th>Grade</th>
                     <th>Status</th>
+                    <th>Statement of Result</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={report.folders.length + 5} style={{ textAlign: 'center', padding: 24, color: 'var(--gray-500)' }}>
+                      <td colSpan={report.folders.length + 6} style={{ textAlign: 'center', padding: 24, color: 'var(--gray-500)' }}>
                         No students assigned to the selected exam folders.
                       </td>
                     </tr>
@@ -472,11 +510,51 @@ export default function CombineResultsPage() {
                             {row.status}
                           </span>
                         </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn-sm btn-outline"
+                            onClick={() => setSelectedStudentForStatement(row)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}
+                          >
+                            📄 View / Print
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Staff Preview Statement of Result Modal */}
+        {selectedStudentForStatement && report && (
+          <div className="modal-overlay" onClick={() => setSelectedStudentForStatement(null)}>
+            <div
+              className="modal modal-lg printable-modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: 860, background: '#ffffff', borderRadius: 12, padding: '24px 20px', maxHeight: '95vh', overflowY: 'auto' }}
+            >
+              <StatementOfResult
+                student={selectedStudentForStatement.user}
+                programName={reportTitle || 'Women in AI Fellowship 2025'}
+                skillSets={report.folders.map((f) => {
+                  const scoreObj = selectedStudentForStatement.folderScores[f.id];
+                  const p = scoreObj && scoreObj.percent != null ? scoreObj.percent : null;
+                  return {
+                    name: f.title,
+                    score: p,
+                    grade: getStatementGrade(p),
+                  };
+                })}
+                cumulativeAverage={selectedStudentForStatement.totalCombined}
+                overallGrade={selectedStudentForStatement.totalCombined != null ? getStatementGrade(selectedStudentForStatement.totalCombined) : null}
+                directorName={directorName}
+                issueDate={issueDate}
+                onClose={() => setSelectedStudentForStatement(null)}
+              />
             </div>
           </div>
         )}
@@ -497,6 +575,7 @@ export default function CombineResultsPage() {
                   <tr>
                     <th>Report Title</th>
                     <th>Folders Combined & Weights</th>
+                    <th>Statement Issue Date</th>
                     <th>Published By</th>
                     <th>Published Date</th>
                     <th>Action</th>
@@ -513,6 +592,9 @@ export default function CombineResultsPage() {
                         {Array.isArray(p.items)
                           ? p.items.map((item) => `${item.title || `Folder ${item.examId}`} (${item.weight}%)`).join(' + ')
                           : '—'}
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 600, color: '#312e81' }}>{p.issueDate || '9th September, 2025'}</span>
                       </td>
                       <td>{p.creator?.name || p.creator?.email || 'Superadmin'}</td>
                       <td>{new Date(p.publishedAt).toLocaleDateString()}</td>

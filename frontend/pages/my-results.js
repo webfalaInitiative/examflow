@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
+import StatementOfResult, { getStatementGrade } from '../components/StatementOfResult';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
@@ -12,6 +13,7 @@ export default function MyResultsPage() {
   const [submissions, setSubmissions] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
   const [selectedCombined, setSelectedCombined] = useState(null);
+  const [showFullStatement, setShowFullStatement] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -104,12 +106,7 @@ export default function MyResultsPage() {
       } else if (testPub && examPub) {
         const total = (group.testItem.scaledScore || 0) + (group.examItem.scaledScore || 0);
         finalVal = `${total.toFixed(1)}%`;
-        if (total >= 70) gradeVal = 'A';
-        else if (total >= 60) gradeVal = 'B';
-        else if (total >= 50) gradeVal = 'C';
-        else if (total >= 40) gradeVal = 'D';
-        else if (total >= 30) gradeVal = 'E';
-        else gradeVal = 'F';
+        gradeVal = getStatementGrade(total);
       }
 
       return {
@@ -125,12 +122,47 @@ export default function MyResultsPage() {
 
   const subjectRows = getSubjectBreakdown();
 
+  // Prepare full program skill sets from completed subject rows
+  const fullProgramSkillSets = subjectRows
+    .filter((r) => r.finalVal !== '—')
+    .map((r) => {
+      const numScore = parseFloat(r.finalVal) || 0;
+      return {
+        name: r.subject,
+        score: numScore,
+        grade: getStatementGrade(numScore),
+      };
+    });
+
   return (
     <RequireAuth>
       <DashboardLayout>
-        <div className="page-header">
-          <h1>My Results 📈</h1>
-          <p>Track your academic test and exam performance</p>
+        <div className="page-header flex-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h1>My Results 📈</h1>
+            <p>Track your academic test and exam performance & download official transcripts</p>
+          </div>
+          {fullProgramSkillSets.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setShowFullStatement(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#0f172a',
+                borderColor: '#0f172a',
+                color: '#fff',
+                padding: '10px 18px',
+                fontWeight: 700,
+                borderRadius: 8,
+                boxShadow: '0 4px 12px rgba(15,23,42,0.15)',
+              }}
+            >
+              🎓 View Official Statement of Result
+            </button>
+          )}
         </div>
 
         <div className="stats-grid">
@@ -152,8 +184,18 @@ export default function MyResultsPage() {
 
         {/* Structured Subject Breakdown Table (Test, Exam, Final, Grade) */}
         <div className="panel" style={{ marginBottom: 32 }}>
-          <div className="panel-header" style={{ background: 'linear-gradient(135deg, #1e1b4b, #312e81)', color: '#fff' }}>
+          <div className="panel-header" style={{ background: 'linear-gradient(135deg, #1e1b4b, #312e81)', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <h2 style={{ color: '#fff', margin: 0 }}>📊 Subject Academic Performance Breakdown</h2>
+            {fullProgramSkillSets.length > 0 && (
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={() => setShowFullStatement(true)}
+                style={{ background: '#ffffff', color: '#1e1b4b', fontWeight: 700, border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer' }}
+              >
+                📄 Generate Statement of Result
+              </button>
+            )}
           </div>
           <div className="panel-body no-pad">
             {loading ? (
@@ -209,7 +251,7 @@ export default function MyResultsPage() {
           </div>
         </div>
 
-        {/* Details Modal */}
+        {/* Details Modal for single exam */}
         {selectedExam && (
           <div className="modal-overlay" onClick={() => setSelectedExam(null)}>
             <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 800 }}>
@@ -292,150 +334,46 @@ export default function MyResultsPage() {
           </div>
         )}
 
-        {/* Combined Assessment Transcript Modal */}
+        {/* Selected Published Combined Assessment - Official Statement of Result Modal */}
         {selectedCombined && (
           <div className="modal-overlay" onClick={() => setSelectedCombined(null)}>
             <div
-              className="modal modal-lg printable-transcript"
+              className="modal modal-lg printable-modal-content"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 750, background: '#fff', borderRadius: 12, padding: 32 }}
+              style={{ maxWidth: 860, background: '#ffffff', borderRadius: 12, padding: '24px 20px', maxHeight: '95vh', overflowY: 'auto' }}
             >
-              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => window.print()}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                >
-                  📥 Download / Print Official PDF Transcript
-                </button>
-                <button type="button" className="btn-outline" onClick={() => setSelectedCombined(null)}>
-                  ✕ Close
-                </button>
-              </div>
+              <StatementOfResult
+                student={selectedCombined.student || user}
+                programName={selectedCombined.title || 'Women in AI Fellowship 2025'}
+                skillSets={selectedCombined.folderBreakdown.map((item) => ({
+                  name: item.examTitle,
+                  score: item.scorePercent,
+                  grade: getStatementGrade(item.scorePercent),
+                }))}
+                cumulativeAverage={selectedCombined.totalCombined}
+                overallGrade={selectedCombined.totalCombined != null ? getStatementGrade(selectedCombined.totalCombined) : null}
+                issueDate={selectedCombined.issueDate || '9th September, 2025'}
+                directorName={selectedCombined.directorName || 'Bakare Nafisat Opeyemi'}
+                onClose={() => setSelectedCombined(null)}
+              />
+            </div>
+          </div>
+        )}
 
-              {/* Printable Header */}
-              <div style={{ textAlign: 'center', borderBottom: '2px solid #6366f1', paddingBottom: 16, marginBottom: 24 }}>
-                <h1 style={{ fontSize: 24, color: '#1e1b4b', margin: 0, textTransform: 'uppercase', letterSpacing: 1 }}>
-                  Official Academic Result Transcript
-                </h1>
-                <p style={{ color: '#4b5563', margin: '4px 0 0', fontSize: 14 }}>{selectedCombined.title}</p>
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>
-                  Issued on {new Date(selectedCombined.publishedAt).toLocaleDateString()}
-                </span>
-              </div>
-
-              {/* Student Details Card */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 20,
-                  background: '#f8fafc',
-                  padding: 16,
-                  borderRadius: 10,
-                  border: '1px solid #e2e8f0',
-                  marginBottom: 24,
-                }}
-              >
-                <div
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: '50%',
-                    background: '#6366f1',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 28,
-                    fontWeight: 'bold',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                  }}
-                >
-                  {selectedCombined.student?.avatarUrl ? (
-                    <img
-                      src={selectedCombined.student.avatarUrl}
-                      alt="Student Avatar"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    ((selectedCombined.student?.name || user?.email || 'S').charAt(0) || 'S').toUpperCase()
-                  )}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                    {selectedCombined.student?.name || user?.name || user?.email}
-                  </h3>
-                  <p style={{ margin: '2px 0 0', color: '#64748b', fontSize: 14 }}>{user?.email}</p>
-                  <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
-                      ID: #{user?.id}
-                    </span>
-                    {(selectedCombined.student?.matricNumber || user?.matricNumber) && (
-                      <span style={{ fontSize: 12, background: '#f3e8ff', color: '#6b21a8', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
-                        Matric No: {selectedCombined.student?.matricNumber || user?.matricNumber}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Final Combined Score</div>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: selectedCombined.totalCombined >= 40 ? '#15803d' : '#b91c1c' }}>
-                    {selectedCombined.totalCombined != null ? `${selectedCombined.totalCombined.toFixed(1)}%` : '—'}
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#4338ca' }}>
-                    Grade: {selectedCombined.gradeLetter} ({selectedCombined.status})
-                  </div>
-                </div>
-              </div>
-
-              {/* Assessment Breakdown Table */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 32 }}>
-                <thead>
-                  <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1' }}>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>Assessment Folder</th>
-                    <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>Assigned Weight</th>
-                    <th style={{ textAlign: 'center', padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>Score Achieved</th>
-                    <th style={{ textAlign: 'right', padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>Weighted Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedCombined.folderBreakdown.map((item) => (
-                    <tr key={item.examId} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '12px', fontWeight: 600 }}>{item.examTitle}</td>
-                      <td style={{ textAlign: 'center', padding: '12px' }}>{item.weight}%</td>
-                      <td style={{ textAlign: 'center', padding: '12px' }}>
-                        {item.scorePercent != null ? `${item.scorePercent.toFixed(1)}%` : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right', padding: '12px', fontWeight: 700 }}>
-                        {item.weightedScore != null ? `+${item.weightedScore.toFixed(1)} pts` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr style={{ background: '#faf5ff', fontWeight: 700, borderTop: '2px solid #c084fc' }}>
-                    <td style={{ padding: '12px' }}>Total Combined Weight & Result</td>
-                    <td style={{ textAlign: 'center', padding: '12px' }}>100%</td>
-                    <td style={{ textAlign: 'center', padding: '12px' }}>—</td>
-                    <td style={{ textAlign: 'right', padding: '12px', fontSize: 16, color: '#6b21a8' }}>
-                      {selectedCombined.totalCombined != null ? `${selectedCombined.totalCombined.toFixed(1)}%` : '—'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* Transcript Footer Signatures */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 24, borderTop: '1px dashed #cbd5e1' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ height: 35, borderBottom: '1px solid #94a3b8', width: 160, margin: '0 auto' }} />
-                  <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 4 }}>Academic Director</span>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ height: 35, borderBottom: '1px solid #94a3b8', width: 160, margin: '0 auto' }} />
-                  <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 4 }}>Superadmin Verification</span>
-                </div>
-              </div>
+        {/* Full Program Statement of Result Modal */}
+        {showFullStatement && (
+          <div className="modal-overlay" onClick={() => setShowFullStatement(false)}>
+            <div
+              className="modal modal-lg printable-modal-content"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: 860, background: '#ffffff', borderRadius: 12, padding: '24px 20px', maxHeight: '95vh', overflowY: 'auto' }}
+            >
+              <StatementOfResult
+                student={user}
+                programName="Women in AI Fellowship 2025"
+                skillSets={fullProgramSkillSets}
+                onClose={() => setShowFullStatement(false)}
+              />
             </div>
           </div>
         )}
@@ -457,7 +395,7 @@ export default function MyResultsPage() {
                     <th>Grade</th>
                     <th>Status</th>
                     <th>Published Date</th>
-                    <th>Transcript</th>
+                    <th>Statement of Result</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -492,7 +430,7 @@ export default function MyResultsPage() {
                           className="btn-sm btn-primary"
                           onClick={() => setSelectedCombined(c)}
                         >
-                          📄 View / Download PDF
+                          📄 Statement of Result (PDF)
                         </button>
                       </td>
                     </tr>

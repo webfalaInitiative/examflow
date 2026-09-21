@@ -85,7 +85,7 @@ router.get('/', verifyToken, async (req, res, next) => {
 // Create exam (folder)
 router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
-    const { title, description, duration, subject, category, maxScale } = req.body;
+    const { title, description, duration, subject, category, maxScale, isManual, autoAssignAll } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required' });
 
     const exam = await prisma.exam.create({
@@ -96,20 +96,36 @@ router.post('/', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, ne
         category: category || 'TEST',
         maxScale: maxScale != null ? parseFloat(maxScale) : 100,
         duration: duration ? parseInt(duration) : null,
+        isManual: Boolean(isManual),
         createdBy: req.user.sub
       }
     });
+
+    // Optionally auto-assign all active students to this folder
+    if (autoAssignAll) {
+      const students = await prisma.user.findMany({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (students.length > 0) {
+        await prisma.examAssignment.createMany({
+          data: students.map((s) => ({ examId: exam.id, userId: s.id })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
     res.status(201).json(exam);
   } catch (err) {
     next(err);
   }
 });
 
-// Update exam folder settings (title, description, duration, subject, category, maxScale)
+// Update exam folder settings (title, description, duration, subject, category, maxScale, isManual)
 router.patch('/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
-    const { title, description, duration, subject, category, maxScale } = req.body;
+    const { title, description, duration, subject, category, maxScale, isManual } = req.body;
 
     const data = {};
     if (title !== undefined) data.title = title;
@@ -118,6 +134,7 @@ router.patch('/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res
     if (subject !== undefined) data.subject = subject || null;
     if (category !== undefined) data.category = category;
     if (maxScale !== undefined) data.maxScale = parseFloat(maxScale);
+    if (isManual !== undefined) data.isManual = Boolean(isManual);
 
     const exam = await prisma.exam.update({
       where: { id: examId },
@@ -173,6 +190,21 @@ async function getExamScoreboardData(examId) {
     }
   }
 
+  // If manual folder has no assignments yet, auto-populate all active students so admin can input marks directly
+  if (exam.isManual && userMap.size === 0) {
+    const activeStudents = await prisma.user.findMany({
+      where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+      select: { id: true, email: true, name: true, avatarUrl: true, matricNumber: true },
+      orderBy: { name: 'asc' },
+    });
+    for (const student of activeStudents) {
+      userMap.set(student.id, {
+        user: student,
+        assignment: null,
+      });
+    }
+  }
+
   const n = exam.questions.length;
   const qIds = new Set(exam.questions.map((eq) => eq.questionId));
 
@@ -186,7 +218,12 @@ async function getExamScoreboardData(examId) {
 
       const nMcq = exam.questions.filter((eq) => eq.question.type === 'mcq').length;
       const nTheory = exam.questions.filter((eq) => eq.question.type === 'theory').length;
-      const manual =
+      
+      const manualMcq =
+        assignment && assignment.manualMcqPercent != null && !Number.isNaN(assignment.manualMcqPercent)
+          ? assignment.manualMcqPercent
+          : null;
+      const manualTheory =
         assignment && assignment.manualTheoryPercent != null && !Number.isNaN(assignment.manualTheoryPercent)
           ? assignment.manualTheoryPercent
           : null;
@@ -210,38 +247,40 @@ async function getExamScoreboardData(examId) {
         }
       }
 
-      const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-
+      let mcqPercent = null;
       let theoryPercent = null;
-      if (nTheory > 0) {
-        if (manual != null) {
-          theoryPercent = manual;
-        } else if (theoryGradedCount === nTheory) {
-          theoryPercent = (theoryPoints / nTheory) * 100;
+      let gradingComplete = false;
+
+      if (exam.isManual) {
+        mcqPercent = manualMcq;
+        theoryPercent = manualTheory;
+        // In manual mode, student is ready if at least one component (MCQ or Theory) is entered
+        gradingComplete = mcqPercent != null || theoryPercent != null;
+      } else {
+        mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? (mcqPoints / nMcq) * 100 : null);
+        if (nTheory > 0) {
+          if (manualTheory != null) {
+            theoryPercent = manualTheory;
+          } else if (theoryGradedCount === nTheory) {
+            theoryPercent = (theoryPoints / nTheory) * 100;
+          }
+        } else if (manualTheory != null) {
+          theoryPercent = manualTheory;
         }
-      } else if (nMcq > 0 && manual != null) {
-        theoryPercent = manual;
+
+        const mcqReady = nMcq === 0 || mcqGradedCount === nMcq || manualMcq != null;
+        const theoryReady = nTheory === 0 || manualTheory != null || theoryGradedCount === nTheory;
+        gradingComplete = mcqReady && theoryReady;
       }
-
-      const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
-      const theoryReady =
-        nTheory === 0 ||
-        manual != null ||
-        theoryGradedCount === nTheory;
-
-      const gradingComplete = mcqReady && theoryReady;
 
       let finalPercent = null;
       if (gradingComplete) {
-        const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-        const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
-
-        if (mcqP != null && thP != null) {
-          finalPercent = (mcqP + thP) / 2;
-        } else if (mcqP != null) {
-          finalPercent = mcqP;
-        } else if (thP != null) {
-          finalPercent = thP;
+        if (mcqPercent != null && theoryPercent != null) {
+          finalPercent = (mcqPercent + theoryPercent) / 2;
+        } else if (mcqPercent != null) {
+          finalPercent = mcqPercent;
+        } else if (theoryPercent != null) {
+          finalPercent = theoryPercent;
         }
       }
 
@@ -250,8 +289,9 @@ async function getExamScoreboardData(examId) {
       return {
         user,
         assignment: {
-          examSubmittedAt: assignment ? assignment.examSubmittedAt : null,
-          manualTheoryPercent: assignment ? assignment.manualTheoryPercent : null,
+          examSubmittedAt: assignment ? assignment.examSubmittedAt : (finalPercent != null ? new Date() : null),
+          manualMcqPercent: manualMcq,
+          manualTheoryPercent: manualTheory,
         },
         mcqPercent,
         theoryPercent,
@@ -260,6 +300,7 @@ async function getExamScoreboardData(examId) {
         maxScale: exam.maxScale || 100,
         category: exam.category || 'TEST',
         subject: exam.subject || null,
+        isManual: exam.isManual,
         gradingComplete,
         answeredCount: subs.length,
         questionCount: n,
@@ -396,15 +437,21 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
 // Publish a Combined Result Report (OWNER only)
 router.post('/combine-results/publish', verifyToken, requireRole('OWNER'), async (req, res, next) => {
   try {
-    const { title, description, items } = req.body;
+    const { title, description, items, issueDate, directorName } = req.body;
     if (!title || !Array.isArray(items) || items.length < 2) {
       return res.status(400).json({ error: 'Title and at least 2 exam items are required' });
     }
 
+    const metaObj = {
+      text: typeof description === 'string' ? description : '',
+      issueDate: issueDate || '9th September, 2025',
+      directorName: directorName || 'Bakare Nafisat Opeyemi',
+    };
+
     const report = await prisma.combinedResultReport.create({
       data: {
         title,
-        description: description || null,
+        description: JSON.stringify(metaObj),
         items,
         published: true,
         publishedAt: new Date(),
@@ -426,7 +473,29 @@ router.get('/combine-results/published', verifyToken, async (req, res, next) => 
       orderBy: { createdAt: 'desc' },
       include: { creator: { select: { name: true, email: true } } },
     });
-    res.json(reports);
+
+    const formatted = reports.map((r) => {
+      let issueDate = null;
+      let directorName = null;
+      let displayText = r.description;
+      try {
+        if (r.description && r.description.startsWith('{')) {
+          const parsed = JSON.parse(r.description);
+          displayText = parsed.text || null;
+          issueDate = parsed.issueDate || null;
+          directorName = parsed.directorName || null;
+        }
+      } catch {}
+
+      return {
+        ...r,
+        description: displayText,
+        issueDate: issueDate || '9th September, 2025',
+        directorName: directorName || 'Bakare Nafisat Opeyemi',
+      };
+    });
+
+    res.json(formatted);
   } catch (err) {
     next(err);
   }
@@ -461,6 +530,18 @@ router.get('/combine-results/my-summary', verifyToken, async (req, res, next) =>
     for (const rep of reports) {
       const items = rep.items;
       if (!Array.isArray(items)) continue;
+
+      let issueDate = null;
+      let directorName = null;
+      let cleanDesc = rep.description;
+      try {
+        if (rep.description && rep.description.startsWith('{')) {
+          const parsed = JSON.parse(rep.description);
+          cleanDesc = parsed.text || null;
+          issueDate = parsed.issueDate || null;
+          directorName = parsed.directorName || null;
+        }
+      } catch {}
 
       let totalCombined = 0;
       let hasAnyScore = false;
@@ -517,7 +598,9 @@ router.get('/combine-results/my-summary', verifyToken, async (req, res, next) =>
       results.push({
         id: rep.id,
         title: rep.title,
-        description: rep.description,
+        description: cleanDesc,
+        issueDate: issueDate || '9th September, 2025',
+        directorName: directorName || 'Bakare Nafisat Opeyemi',
         publishedAt: rep.publishedAt,
         student: userObj,
         folderBreakdown,
@@ -545,6 +628,10 @@ router.get('/:id/scoreboard', verifyToken, requireRole('OWNER', 'ADMIN'), async 
       exam: {
         id: data.exam.id,
         title: data.exam.title,
+        isManual: data.exam.isManual,
+        maxScale: data.exam.maxScale,
+        category: data.exam.category,
+        subject: data.exam.subject,
         resultsPublished: data.exam.resultsPublished,
         publishRequested: data.exam.publishRequested,
         publishRequestedAt: data.exam.publishRequestedAt,
@@ -569,9 +656,10 @@ router.patch(
       const raw = req.body.manualTheoryPercent;
 
       if (raw === null || raw === '') {
-        const cleared = await prisma.examAssignment.update({
+        const cleared = await prisma.examAssignment.upsert({
           where: { examId_userId: { examId, userId } },
-          data: { manualTheoryPercent: null },
+          update: { manualTheoryPercent: null },
+          create: { examId, userId, manualTheoryPercent: null },
         });
         return res.json(cleared);
       }
@@ -581,11 +669,139 @@ router.patch(
         return res.status(400).json({ error: 'manualTheoryPercent must be between 0 and 100' });
       }
 
-      const updated = await prisma.examAssignment.update({
+      const updated = await prisma.examAssignment.upsert({
         where: { examId_userId: { examId, userId } },
-        data: { manualTheoryPercent: val },
+        update: { manualTheoryPercent: val, examSubmittedAt: new Date() },
+        create: { examId, userId, manualTheoryPercent: val, examSubmittedAt: new Date() },
       });
       res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Set both manual MCQ % and theory % for a student (0–100).
+router.patch(
+  '/:id/assignments/:userId/manual-scores',
+  verifyToken,
+  requireRole('OWNER', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const examId = parseInt(req.params.id);
+      const userId = parseInt(req.params.userId);
+      const { manualMcqPercent, manualTheoryPercent } = req.body;
+
+      const parseVal = (raw) => {
+        if (raw === null || raw === '' || raw === undefined) return null;
+        const v = parseFloat(raw);
+        if (Number.isNaN(v) || v < 0 || v > 100) throw new Error('Scores must be between 0 and 100');
+        return v;
+      };
+
+      const mcqVal = parseVal(manualMcqPercent);
+      const theoryVal = parseVal(manualTheoryPercent);
+      const hasAnyScore = mcqVal != null || theoryVal != null;
+
+      const updated = await prisma.examAssignment.upsert({
+        where: { examId_userId: { examId, userId } },
+        update: {
+          manualMcqPercent: mcqVal,
+          manualTheoryPercent: theoryVal,
+          ...(hasAnyScore ? { examSubmittedAt: new Date() } : {}),
+        },
+        create: {
+          examId,
+          userId,
+          manualMcqPercent: mcqVal,
+          manualTheoryPercent: theoryVal,
+          ...(hasAnyScore ? { examSubmittedAt: new Date() } : {}),
+        },
+      });
+      res.json(updated);
+    } catch (err) {
+      if (err.message?.includes('Scores must be')) {
+        return res.status(400).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
+
+// Batch save manual scores for multiple students at once
+router.patch(
+  '/:id/assignments/batch-scores',
+  verifyToken,
+  requireRole('OWNER', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const examId = parseInt(req.params.id);
+      const { scores } = req.body; // Array of { userId, manualMcqPercent, manualTheoryPercent }
+      if (!Array.isArray(scores)) {
+        return res.status(400).json({ error: 'scores must be an array' });
+      }
+
+      const parseVal = (raw) => {
+        if (raw === null || raw === '' || raw === undefined) return null;
+        const v = parseFloat(raw);
+        if (Number.isNaN(v) || v < 0 || v > 100) return null;
+        return v;
+      };
+
+      const operations = scores.map((item) => {
+        const userId = parseInt(item.userId);
+        const mcqVal = parseVal(item.manualMcqPercent);
+        const theoryVal = parseVal(item.manualTheoryPercent);
+        const hasAnyScore = mcqVal != null || theoryVal != null;
+
+        return prisma.examAssignment.upsert({
+          where: { examId_userId: { examId, userId } },
+          update: {
+            manualMcqPercent: mcqVal,
+            manualTheoryPercent: theoryVal,
+            ...(hasAnyScore ? { examSubmittedAt: new Date() } : {}),
+          },
+          create: {
+            examId,
+            userId,
+            manualMcqPercent: mcqVal,
+            manualTheoryPercent: theoryVal,
+            ...(hasAnyScore ? { examSubmittedAt: new Date() } : {}),
+          },
+        });
+      });
+
+      await prisma.$transaction(operations);
+      res.json({ ok: true, count: operations.length });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// Assign all active students to this exam folder
+router.post(
+  '/:id/assign-all-students',
+  verifyToken,
+  requireRole('OWNER', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const examId = parseInt(req.params.id);
+      const activeStudents = await prisma.user.findMany({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+        select: { id: true },
+      });
+
+      const operations = activeStudents.map((s) =>
+        prisma.examAssignment.upsert({
+          where: { examId_userId: { examId, userId: s.id } },
+          update: {},
+          create: { examId, userId: s.id },
+        })
+      );
+
+      await prisma.$transaction(operations);
+      res.json({ ok: true, assignedCount: activeStudents.length });
     } catch (err) {
       next(err);
     }
@@ -744,7 +960,11 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
         const qIds = new Set(exam.questions.map((eq) => eq.questionId));
         const byQ = new Map(subs.filter((s) => qIds.has(s.questionId)).map((s) => [s.questionId, s]));
 
-        const manual =
+        const manualMcq =
+          a.manualMcqPercent != null && !Number.isNaN(a.manualMcqPercent)
+            ? a.manualMcqPercent
+            : null;
+        const manualTheory =
           a.manualTheoryPercent != null && !Number.isNaN(a.manualTheoryPercent)
             ? a.manualTheoryPercent
             : null;
@@ -768,44 +988,45 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
           }
         }
 
-        const mcqPercent = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-
+        let mcqPercent = null;
         let theoryPercent = null;
-        if (nTheory > 0) {
-          if (manual != null) {
-            theoryPercent = manual;
-          } else if (theoryGradedCount === nTheory) {
-            theoryPercent = (theoryPoints / nTheory) * 100;
+        let gradingComplete = false;
+
+        if (exam.isManual) {
+          mcqPercent = manualMcq;
+          theoryPercent = manualTheory;
+          gradingComplete = mcqPercent != null || theoryPercent != null;
+        } else {
+          mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? (mcqPoints / nMcq) * 100 : null);
+          if (nTheory > 0) {
+            if (manualTheory != null) {
+              theoryPercent = manualTheory;
+            } else if (theoryGradedCount === nTheory) {
+              theoryPercent = (theoryPoints / nTheory) * 100;
+            }
+          } else if (manualTheory != null) {
+            theoryPercent = manualTheory;
           }
-        } else if (nMcq > 0 && manual != null) {
-          theoryPercent = manual;
+
+          const mcqReady = nMcq === 0 || mcqGradedCount === nMcq || manualMcq != null;
+          const theoryReady = nTheory === 0 || manualTheory != null || theoryGradedCount === nTheory;
+          gradingComplete = mcqReady && theoryReady;
         }
-
-        const mcqReady = nMcq === 0 || mcqGradedCount === nMcq;
-        const theoryReady =
-          nTheory === 0 ||
-          manual != null ||
-          theoryGradedCount === nTheory;
-
-        const gradingComplete = mcqReady && theoryReady;
 
         let finalPercent = null;
         if (gradingComplete) {
-          const mcqP = nMcq > 0 ? (mcqPoints / nMcq) * 100 : null;
-          const thP = manual != null ? manual : nTheory > 0 && theoryGradedCount === nTheory ? (theoryPoints / nTheory) * 100 : null;
-
-          if (mcqP != null && thP != null) {
-            finalPercent = (mcqP + thP) / 2;
-          } else if (mcqP != null) {
-            finalPercent = mcqP;
-          } else if (thP != null) {
-            finalPercent = thP;
+          if (mcqPercent != null && theoryPercent != null) {
+            finalPercent = (mcqPercent + theoryPercent) / 2;
+          } else if (mcqPercent != null) {
+            finalPercent = mcqPercent;
+          } else if (theoryPercent != null) {
+            finalPercent = theoryPercent;
           }
         }
 
         // Determine passed/failed status
         let status = 'Pending';
-        if (a.examSubmittedAt) {
+        if (a.examSubmittedAt || exam.isManual || finalPercent != null) {
           if (gradingComplete && finalPercent != null) {
             status = finalPercent >= 40 ? 'Passed' : 'Failed';
           } else {
@@ -827,6 +1048,7 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
           subject,
           category,
           maxScale,
+          isManual: exam.isManual,
           examSubmittedAt: a.examSubmittedAt,
           resultsPublished: true,
           mcqPercent,

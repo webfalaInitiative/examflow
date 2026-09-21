@@ -83,6 +83,8 @@ model Exam {
   publishRequested   Boolean   @default(false)
   publishRequestedAt DateTime?
   publishRequestedBy Int?
+  /// When true, scores are manually entered by admin/superadmin rather than taken online
+  isManual           Boolean   @default(false)
 
   creator     User             @relation("ExamCreator", fields: [createdBy], references: [id])
   questions   ExamQuestion[]
@@ -107,8 +109,10 @@ model ExamAssignment {
   examId     Int
   userId     Int
   assignedAt          DateTime @default(now())
-  /// Set when student has submitted all questions in this exam folder
+  /// Set when student has submitted all questions in this exam folder (or when manual scores are entered)
   examSubmittedAt     DateTime?
+  /// 0–100: admin-entered MCQ score on scoreboard (for manual folders or manual override)
+  manualMcqPercent    Float?
   /// 0–100: admin-entered theory score on scoreboard; combined with MCQ before publish
   manualTheoryPercent Float?
 

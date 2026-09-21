@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
 import WebfalaLogo from '../components/WebfalaLogo';
 
@@ -76,7 +77,7 @@ export default function Register() {
 
           <div className="form-actions">
             <button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create account'}</button>
-            <a className="small-link" href="/login">Already have an account?</a>
+            <Link className="small-link" href="/login">Already have an account?</Link>
           </div>
         </form>
       </div>
