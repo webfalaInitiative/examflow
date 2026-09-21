@@ -46,6 +46,7 @@ export default function StatementOfResult({
   directorName = 'Bakare Nafisat Opeyemi',
   directorTitle = 'Executive Director',
   issueDate = null,
+  canEditDate = false,
   onClose = null,
   showActions = true,
 }) {
@@ -88,27 +89,33 @@ export default function StatementOfResult({
     <div className="statement-of-result-wrapper">
       {showActions && (
         <div className="statement-actions no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, width: '100%', maxWidth: 800, marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>
-              📅 Issued Date:
-            </label>
-            <input
-              type="text"
-              value={currentDate}
-              onChange={(e) => setCurrentDate(e.target.value)}
-              placeholder="e.g. 9th September, 2025"
-              style={{
-                padding: '6px 10px',
-                fontSize: 13,
-                fontWeight: 600,
-                borderRadius: 6,
-                border: '1px solid #d1d5db',
-                width: 190,
-                background: '#ffffff',
-              }}
-              title="Edit the fixed date that appears on the Statement of Result"
-            />
-          </div>
+          {canEditDate ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>
+                📅 Issued Date:
+              </label>
+              <input
+                type="text"
+                value={currentDate}
+                onChange={(e) => setCurrentDate(e.target.value)}
+                placeholder="e.g. 9th September, 2025"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid #d1d5db',
+                  width: 190,
+                  background: '#ffffff',
+                }}
+                title="Edit the fixed date that appears on the Statement of Result"
+              />
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>
+              📅 Issued Date: <strong style={{ color: '#0f172a' }}>{currentDate}</strong>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button
@@ -289,16 +296,20 @@ export default function StatementOfResult({
               <div className="signer-title">{directorTitle}</div>
             </div>
 
-            {/* Right Signature: Date (Editable and Fixed) */}
+            {/* Right Signature: Date */}
             <div className="signature-col right-sig">
-              <input
-                type="text"
-                className="issue-date-input"
-                value={currentDate}
-                onChange={(e) => setCurrentDate(e.target.value)}
-                placeholder="e.g. 9th September, 2025"
-                title="Click to edit issued date"
-              />
+              {canEditDate ? (
+                <input
+                  type="text"
+                  className="issue-date-input"
+                  value={currentDate}
+                  onChange={(e) => setCurrentDate(e.target.value)}
+                  placeholder="e.g. 9th September, 2025"
+                  title="Click to edit issued date"
+                />
+              ) : (
+                <div className="issue-date-text">{currentDate}</div>
+              )}
               <div className="signature-rule" />
               <div className="date-label">Date</div>
             </div>

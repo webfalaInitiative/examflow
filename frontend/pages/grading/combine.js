@@ -553,6 +553,7 @@ export default function CombineResultsPage() {
                 overallGrade={selectedStudentForStatement.totalCombined != null ? getStatementGrade(selectedStudentForStatement.totalCombined) : null}
                 directorName={directorName}
                 issueDate={issueDate}
+                canEditDate={true}
                 onClose={() => setSelectedStudentForStatement(null)}
               />
             </div>
