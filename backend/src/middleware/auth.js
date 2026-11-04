@@ -29,6 +29,7 @@ export function requireRole(...allowed) {
       }
 
       if (!role || !allowed.includes(role)) return res.status(403).json({ error: 'Forbidden' });
+      req.user.role = role; // expose authoritative DB role to downstream ownership checks
       next();
     } catch (err) {
       next(err);

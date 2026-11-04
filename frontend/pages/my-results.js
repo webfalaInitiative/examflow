@@ -67,16 +67,21 @@ export default function MyResultsPage() {
           subject: subjectName,
           testItem: null,
           examItem: null,
+          finalItem: null,
           combinedItem: null,
         });
       }
 
       const group = subjectMap.get(subjectName);
-      const isTest = r.category === 'TEST' || (r.maxScale && r.maxScale <= 50) || r.title.toLowerCase().includes('test');
-      if (isTest) {
-        group.testItem = r;
+      if (r.category === 'FINAL' || (r.title && r.title.toLowerCase().includes('final score'))) {
+        group.finalItem = r;
       } else {
-        group.examItem = r;
+        const isTest = r.category === 'TEST' || (r.maxScale && r.maxScale <= 50) || r.title.toLowerCase().includes('test');
+        if (isTest) {
+          group.testItem = r;
+        } else {
+          group.examItem = r;
+        }
       }
     });
 
@@ -93,6 +98,7 @@ export default function MyResultsPage() {
     return Array.from(subjectMap.values()).map((group) => {
       const testPub = group.testItem && group.testItem.resultsPublished && group.testItem.scaledScore != null;
       const examPub = group.examItem && group.examItem.resultsPublished && group.examItem.scaledScore != null;
+      const finalPub = group.finalItem && group.finalItem.resultsPublished && group.finalItem.scaledScore != null;
 
       const testVal = testPub ? `${group.testItem.scaledScore.toFixed(1)}` : '—';
       const examVal = examPub ? `${group.examItem.scaledScore.toFixed(1)}` : '—';
@@ -100,7 +106,10 @@ export default function MyResultsPage() {
       let finalVal = '—';
       let gradeVal = '—';
 
-      if (group.combinedItem && group.combinedItem.totalCombined != null) {
+      if (finalPub) {
+        finalVal = `${group.finalItem.scaledScore.toFixed(1)}%`;
+        gradeVal = getStatementGrade(group.finalItem.scaledScore);
+      } else if (group.combinedItem && group.combinedItem.totalCombined != null) {
         finalVal = `${group.combinedItem.totalCombined.toFixed(1)}%`;
         gradeVal = group.combinedItem.gradeLetter || '—';
       } else if (testPub && examPub) {
@@ -115,7 +124,7 @@ export default function MyResultsPage() {
         examVal,
         finalVal,
         gradeVal,
-        isFullyPublished: (testPub && examPub) || Boolean(group.combinedItem),
+        isFullyPublished: finalPub || (testPub && examPub) || Boolean(group.combinedItem),
       };
     });
   };

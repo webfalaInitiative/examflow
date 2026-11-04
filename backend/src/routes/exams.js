@@ -3,6 +3,7 @@ import prisma from '../config/prismaClient.js';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import { sendMail } from '../lib/email.js';
 import { logModeration } from '../lib/moderationLog.js';
+import { normalizeQuestionInput, normalizeStoredQuestion, toPrismaData } from '../lib/questionUtils.js';
 
 const router = express.Router();
 
@@ -348,6 +349,8 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
       folderDetails.push({
         id: data.exam.id,
         title: data.exam.title,
+        subject: data.exam.subject || null,
+        category: data.exam.category || 'TEST',
         weight,
       });
 
@@ -434,8 +437,143 @@ router.post('/combine-results', verifyToken, requireRole('OWNER', 'ADMIN'), asyn
   }
 });
 
-// Publish a Combined Result Report (OWNER only)
-router.post('/combine-results/publish', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+// Combine two or more folders into a new final subject folder before publishing
+router.post('/consolidate-folder', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { title, subject, items, description } = req.body;
+    // items: array of { examId, weight }
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Final subject folder title is required' });
+    }
+    if (!Array.isArray(items) || items.length < 2) {
+      return res.status(400).json({ error: 'Please select at least 2 folders to combine into the final subject folder' });
+    }
+
+    const seenIds = new Set();
+    const cleanItems = [];
+    let totalWeight = 0;
+    for (const it of items) {
+      const examId = parseInt(it.examId);
+      const weight = parseFloat(it.weight) || 0;
+      if (Number.isNaN(examId) || seenIds.has(examId)) continue;
+      seenIds.add(examId);
+      cleanItems.push({ examId, weight });
+      totalWeight += weight;
+    }
+
+    if (cleanItems.length < 2) {
+      return res.status(400).json({ error: 'Please select at least 2 distinct exam folders' });
+    }
+
+    if (Math.abs(totalWeight - 100) > 0.05) {
+      return res.status(400).json({ error: `Total weight must equal 100%. Current total: ${totalWeight}%` });
+    }
+
+    // Retrieve scoreboard data for each source folder
+    const sourceFolders = [];
+    for (const item of cleanItems) {
+      const data = await getExamScoreboardData(item.examId);
+      if (!data) {
+        return res.status(404).json({ error: `Source exam folder #${item.examId} not found` });
+      }
+      sourceFolders.push({
+        exam: data.exam,
+        rows: data.rows,
+        weight: item.weight,
+      });
+    }
+
+    // Map all participating or active students
+    const studentMap = new Map();
+    const activeStudents = await prisma.user.findMany({
+      where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+      select: { id: true, email: true, name: true, matricNumber: true },
+      orderBy: { name: 'asc' },
+    });
+    for (const s of activeStudents) {
+      studentMap.set(s.id, { user: s, folderScores: {} });
+    }
+
+    for (const sf of sourceFolders) {
+      for (const row of sf.rows) {
+        const uId = row.user.id;
+        if (!studentMap.has(uId)) {
+          studentMap.set(uId, { user: row.user, folderScores: {} });
+        }
+        studentMap.get(uId).folderScores[sf.exam.id] = {
+          percent: row.finalPercent,
+          weight: sf.weight,
+        };
+      }
+    }
+
+    // Compose description
+    const desc = description?.trim() || `Consolidated final score combining ${sourceFolders.map(s => `"${s.exam.title}" (${s.weight}%)`).join(' + ')}`;
+    const finalSubject = subject?.trim() || sourceFolders[0]?.exam?.subject || null;
+
+    // Create the new final subject folder
+    const newExam = await prisma.exam.create({
+      data: {
+        title: title.trim(),
+        subject: finalSubject,
+        category: 'FINAL',
+        maxScale: 100,
+        isManual: true,
+        description: desc,
+        createdBy: req.user.sub,
+      },
+    });
+
+    // Create assignments for all students with their consolidated score
+    const studentList = Array.from(studentMap.values());
+    const assignmentOps = [];
+    let countWithScores = 0;
+
+    for (const { user, folderScores } of studentList) {
+      let consolidated = 0;
+      let hasAny = false;
+
+      for (const sf of sourceFolders) {
+        const fs = folderScores[sf.exam.id];
+        if (fs && fs.percent != null && !Number.isNaN(fs.percent)) {
+          consolidated += (fs.percent * sf.weight) / 100;
+          hasAny = true;
+        }
+      }
+
+      const finalVal = hasAny ? Math.round(consolidated * 10) / 10 : null;
+      if (finalVal != null) countWithScores++;
+
+      assignmentOps.push(
+        prisma.examAssignment.create({
+          data: {
+            examId: newExam.id,
+            userId: user.id,
+            manualTheoryPercent: finalVal,
+            manualMcqPercent: null,
+            examSubmittedAt: finalVal != null ? new Date() : null,
+          },
+        })
+      );
+    }
+
+    if (assignmentOps.length > 0) {
+      await prisma.$transaction(assignmentOps);
+    }
+
+    res.status(201).json({
+      ok: true,
+      exam: newExam,
+      studentCount: studentList.length,
+      scoredCount: countWithScores,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Publish a Combined Result Report (OWNER or ADMIN)
+router.post('/combine-results/publish', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const { title, description, items, issueDate, directorName } = req.body;
     if (!title || !Array.isArray(items) || items.length < 2) {
@@ -458,6 +596,20 @@ router.post('/combine-results/publish', verifyToken, requireRole('OWNER'), async
         createdBy: req.user.sub,
       },
     });
+
+    // Also mark the selected final folders as published so students can see their individual scores
+    const examIds = items
+      .map((i) => parseInt(i.examId))
+      .filter((id) => !Number.isNaN(id));
+    if (examIds.length > 0) {
+      await prisma.exam.updateMany({
+        where: { id: { in: examIds } },
+        data: {
+          resultsPublished: true,
+          resultsPublishedAt: new Date(),
+        },
+      });
+    }
 
     res.status(201).json(report);
   } catch (err) {
@@ -501,8 +653,8 @@ router.get('/combine-results/published', verifyToken, async (req, res, next) => 
   }
 });
 
-// Delete / Unpublish a Combined Result Report (OWNER only)
-router.delete('/combine-results/published/:id', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+// Delete / Unpublish a Combined Result Report (OWNER or ADMIN)
+router.delete('/combine-results/published/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     await prisma.combinedResultReport.delete({ where: { id } });
@@ -1097,6 +1249,12 @@ router.get('/:id', verifyToken, async (req, res, next) => {
 
     if (!exam) return res.status(404).json({ error: 'Exam not found' });
 
+    // Normalize any stored question options/correct values
+    exam.questions = exam.questions.map((eq) => ({
+      ...eq,
+      question: eq.question ? normalizeStoredQuestion(eq.question) : eq.question,
+    }));
+
     // Check if student is assigned to this exam
     if (role === 'STUDENT') {
       const isAssigned = await prisma.examAssignment.findUnique({
@@ -1113,6 +1271,7 @@ router.get('/:id', verifyToken, async (req, res, next) => {
       exam.questions = exam.questions.map((q) => {
         if (q.question) {
           q.question.correct = undefined;
+          q.question.explanation = undefined;
         }
         return q;
       });
@@ -1168,16 +1327,34 @@ router.post('/:id/questions', verifyToken, requireRole('OWNER', 'ADMIN'), async 
 
     if (!Array.isArray(questionIds)) return res.status(400).json({ error: 'questionIds must be an array' });
 
+    const ids = [...new Set(questionIds.map((q) => parseInt(q, 10)).filter((q) => !Number.isNaN(q)))];
+    const adminScoped = req.user.role !== 'OWNER';
+
+    if (adminScoped) {
+      // ADMINs may only attach questions they created. Questions that are already in the
+      // folder (e.g. added by the Super Admin) are allowed to stay untouched.
+      const [owned, existing] = await Promise.all([
+        prisma.question.findMany({ where: { id: { in: ids }, createdBy: req.user.sub }, select: { id: true } }),
+        prisma.examQuestion.findMany({ where: { examId }, select: { questionId: true } }),
+      ]);
+      const allowed = new Set([...owned.map((q) => q.id), ...existing.map((e) => e.questionId)]);
+      if (ids.some((id) => !allowed.has(id))) {
+        return res.status(403).json({ error: 'You can only add questions that you created' });
+      }
+    }
+
     // Delete any exam questions that are no longer selected
+    // (ADMINs can only remove their own questions from the folder)
     await prisma.examQuestion.deleteMany({
       where: {
         examId,
-        questionId: { notIn: questionIds },
+        questionId: { notIn: ids },
+        ...(adminScoped ? { question: { createdBy: req.user.sub } } : {}),
       },
     });
 
     // Upsert remaining selected questions
-    const operations = questionIds.map((qId, index) => {
+    const operations = ids.map((qId, index) => {
       return prisma.examQuestion.upsert({
         where: {
           examId_questionId: { examId, questionId: qId }
@@ -1202,18 +1379,17 @@ router.post('/:id/questions', verifyToken, requireRole('OWNER', 'ADMIN'), async 
 router.post('/:id/questions/new', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const examId = parseInt(req.params.id);
-    const { title, type, body, options, correct } = req.body;
-    
-    if (!title || !type) return res.status(400).json({ error: 'Title and type are required' });
+    let normalized;
+    try {
+      normalized = normalizeQuestionInput(req.body);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
 
     const approvalStatus = req.user.role === 'ADMIN' ? 'PENDING' : 'APPROVED';
     const question = await prisma.question.create({
       data: {
-        title,
-        type,
-        body,
-        options,
-        correct,
+        ...toPrismaData(normalized),
         createdBy: req.user.sub,
         approvalStatus,
       },
@@ -1239,6 +1415,13 @@ router.delete('/:id/questions/:questionId', verifyToken, requireRole('OWNER', 'A
   try {
     const examId = parseInt(req.params.id);
     const questionId = parseInt(req.params.questionId);
+
+    if (req.user.role !== 'OWNER') {
+      const question = await prisma.question.findUnique({ where: { id: questionId }, select: { createdBy: true } });
+      if (!question || question.createdBy !== req.user.sub) {
+        return res.status(403).json({ error: 'You can only manage questions that you created' });
+      }
+    }
 
     await prisma.examQuestion.delete({
       where: {

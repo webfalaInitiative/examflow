@@ -2,6 +2,7 @@ import express from 'express';
 import prisma from '../config/prismaClient.js';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import { sendMail } from '../lib/email.js';
+import { normalizeStoredQuestion } from '../lib/questionUtils.js';
 
 const router = express.Router();
 
@@ -57,9 +58,10 @@ async function notifyExamSubmittedIfComplete(userId, examId) {
 // Get stats (OWNER/ADMIN) — must be before /:id routes
 router.get('/stats', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
+    const questionScope = req.user.role === 'OWNER' ? {} : { createdBy: req.user.sub };
     const [totalUsers, totalQuestions, totalSubmissions, gradedSubmissions] = await Promise.all([
       prisma.user.count(),
-      prisma.question.count(),
+      prisma.question.count({ where: questionScope }),
       prisma.submission.count(),
       prisma.submission.count({ where: { graded: true } }),
     ]);
@@ -140,8 +142,9 @@ router.post('/', verifyToken, requireRole('STUDENT'), async (req, res, next) => 
     let score = null;
     let graded = false;
 
-    if (question.type === 'mcq' && question.correct != null) {
-      const correctAnswer = String(question.correct);
+    const normQ = normalizeStoredQuestion(question);
+    if (normQ.type === 'mcq' && normQ.correct != null) {
+      const correctAnswer = String(normQ.correct);
       const studentAnswer = String(answer);
       score = correctAnswer === studentAnswer ? 1.0 : 0.0;
       graded = true;
@@ -226,8 +229,9 @@ router.post('/bulk', verifyToken, requireRole('STUDENT'), async (req, res, next)
       let score = null;
       let graded = false;
 
-      if (question.type === 'mcq' && question.correct != null) {
-        const correctAnswer = String(question.correct);
+      const normQ = normalizeStoredQuestion(question);
+      if (normQ.type === 'mcq' && normQ.correct != null) {
+        const correctAnswer = String(normQ.correct);
         const studentAnswer = String(answer);
         score = (answer !== undefined && answer !== '') && (correctAnswer === studentAnswer) ? 1.0 : 0.0;
         graded = true;

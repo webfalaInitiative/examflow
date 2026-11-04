@@ -9,7 +9,7 @@ export default function QuestionsPage() {
   const [questions, setQuestions] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [form, setForm] = useState({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '' });
+  const [form, setForm] = useState({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '', explanation: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,25 +30,81 @@ export default function QuestionsPage() {
   };
 
   const resetForm = () => {
-    setForm({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '' });
+    setForm({ title: '', type: 'mcq', body: '', options: ['', '', '', ''], correctIndex: 0, correctText: '', explanation: '' });
     setEditId(null);
     setError('');
   };
 
   const openCreate = () => { resetForm(); setShowForm(true); };
 
+  // Convert any stored option shape (array of strings, array of objects, keyed object, JSON string)
+  // into a plain string array so JSON-imported questions open in the editor just like manual ones.
+  const toOptionTexts = (raw) => {
+    let val = raw;
+    if (typeof val === 'string') {
+      try { val = JSON.parse(val); } catch { val = val.split(/\r?\n|[;|]/); }
+    }
+    const toText = (o) => {
+      if (o == null) return '';
+      if (typeof o === 'object') return String(o.text ?? o.label ?? o.value ?? o.option ?? JSON.stringify(o));
+      return String(o);
+    };
+    if (Array.isArray(val)) return { opts: val.map(toText), keys: null, flagged: val.findIndex(o => o && typeof o === 'object' && (o.isCorrect === true || o.correct === true)) };
+    if (val && typeof val === 'object') {
+      const keys = Object.keys(val);
+      return { opts: keys.map(k => toText(val[k])), keys, flagged: -1 };
+    }
+    return { opts: [], keys: null, flagged: -1 };
+  };
+
+  const resolveCorrectIdx = (correct, opts, keys, flagged) => {
+    if (correct == null || correct === '') return flagged >= 0 ? flagged : 0;
+    let c = Array.isArray(correct) ? correct[0] : correct;
+    if (typeof c === 'number' && Number.isInteger(c) && c >= 0 && c < opts.length) return c;
+    const str = String(c).trim();
+    if (/^\d+$/.test(str)) {
+      const n = parseInt(str, 10);
+      if (n >= 0 && n < opts.length) return n;
+    }
+    if (keys) {
+      const k = keys.findIndex(key => key.toLowerCase() === str.toLowerCase());
+      if (k >= 0) return k;
+    }
+    const t = opts.findIndex(o => o.trim().toLowerCase() === str.toLowerCase());
+    if (t >= 0) return t;
+    if (/^[a-z]$/i.test(str)) {
+      const l = str.toUpperCase().charCodeAt(0) - 65;
+      if (l >= 0 && l < opts.length) return l;
+    }
+    return flagged >= 0 ? flagged : 0;
+  };
+
   const openEdit = (q) => {
-    const opts = q.type === 'mcq' && q.options ? (typeof q.options === 'string' ? JSON.parse(q.options) : q.options) : ['', '', '', ''];
+    if (user?.role !== 'OWNER' && q?.createdBy !== user?.id) {
+      alert('You can only edit questions that you created.');
+      return;
+    }
+    let opts = ['', '', '', ''];
     let correctIdx = 0;
     let correctTxt = '';
-    if (q.type === 'mcq' && q.correct != null) {
-      const correct = typeof q.correct === 'string' ? q.correct : JSON.stringify(q.correct);
-      correctIdx = opts.findIndex((o, i) => JSON.stringify(i) === correct || JSON.stringify(o) === correct) || 0;
-      if (correctIdx < 0) correctIdx = typeof q.correct === 'number' ? q.correct : 0;
-    } else if (q.type === 'theory' && q.correct != null) {
-      correctTxt = typeof q.correct === 'string' ? q.correct : String(q.correct);
+    if (q.type === 'mcq') {
+      const { opts: parsed, keys, flagged } = toOptionTexts(q.options);
+      if (parsed.length > 0) opts = parsed;
+      while (opts.length < 2) opts.push('');
+      correctIdx = resolveCorrectIdx(q.correct, opts, keys, flagged);
+    } else if (q.correct != null) {
+      correctTxt = typeof q.correct === 'string' ? q.correct : (typeof q.correct === 'object' ? JSON.stringify(q.correct) : String(q.correct));
     }
-    setForm({ title: q.title, type: q.type, body: q.body || '', options: opts, correctIndex: correctIdx, correctText: correctTxt });
+    setForm({
+      title: q.title || '',
+      type: q.type === 'mcq' ? 'mcq' : 'theory',
+      body: q.body || '',
+      options: opts,
+      correctIndex: correctIdx,
+      correctText: correctTxt,
+      explanation: q.explanation || '',
+    });
+    setError('');
     setEditId(q.id);
     setShowForm(true);
   };
@@ -56,20 +112,31 @@ export default function QuestionsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!form.title.trim()) return setError('Title is required');
+    if (!String(form.title || '').trim()) return setError('Title is required');
+
+    // Keep the correct answer pointing at the same option after blank options are dropped
+    const cleanedOptions = [];
+    let mappedCorrect = -1;
     if (form.type === 'mcq') {
-      const validOpts = form.options.filter(o => o.trim());
-      if (validOpts.length < 2) return setError('At least 2 options required');
+      form.options.forEach((o, i) => {
+        const text = String(o ?? '').trim();
+        if (!text) return;
+        if (i === form.correctIndex) mappedCorrect = cleanedOptions.length;
+        cleanedOptions.push(text);
+      });
+      if (cleanedOptions.length < 2) return setError('At least 2 options required');
+      if (mappedCorrect < 0) return setError('Please select the correct option (it cannot be blank)');
     }
 
     setSaving(true);
     try {
       const payload = {
-        title: form.title,
+        title: String(form.title).trim(),
         type: form.type,
         body: form.body || null,
-        options: form.type === 'mcq' ? form.options.filter(o => o.trim()) : null,
-        correct: form.type === 'mcq' ? form.correctIndex : (form.correctText || null),
+        options: form.type === 'mcq' ? cleanedOptions : null,
+        correct: form.type === 'mcq' ? mappedCorrect : (form.correctText || null),
+        explanation: form.explanation?.trim() ? form.explanation : null,
       };
 
       if (editId) {
@@ -86,8 +153,17 @@ export default function QuestionsPage() {
     setSaving(false);
   };
 
-  const isStaff = user?.role === 'OWNER' || user?.role === 'ADMIN';
-  const canModerate = user?.role === 'OWNER';
+  const isOwner = user?.role === 'OWNER';
+  const isStaff = isOwner || user?.role === 'ADMIN';
+  const canModerate = isOwner;
+
+  // Enforce role-based question access on the frontend as well:
+  // OWNER (Super Admin) can view/edit/manage all questions across every admin account;
+  // each ADMIN can only view/edit/manage questions they personally created/uploaded.
+  const canManageQuestion = (q) => isOwner || (user?.role === 'ADMIN' && q?.createdBy === user?.id);
+  const visibleQuestions = isOwner
+    ? questions
+    : questions.filter((q) => q.createdBy === user?.id);
 
   const approveQuestion = async (id) => {
     try {
@@ -98,10 +174,14 @@ export default function QuestionsPage() {
     }
   };
 
-  const deleteQuestion = async (id) => {
+  const deleteQuestion = async (q) => {
+    if (!canManageQuestion(q)) {
+      alert('You can only delete questions that you created.');
+      return;
+    }
     if (!confirm('Delete this question? All related submissions will also be deleted.')) return;
     try {
-      await api.delete(`/questions/${id}`);
+      await api.delete(`/questions/${q.id}`);
       loadQuestions();
     } catch (err) {
       alert(err.response?.data?.error || 'Delete failed');
@@ -137,6 +217,7 @@ export default function QuestionsPage() {
     const bodyIdx = headers.indexOf('body');
     const optionsIdx = headers.indexOf('options');
     const correctIdx = headers.indexOf('correct');
+    const explanationIdx = headers.indexOf('explanation');
 
     if (titleIdx === -1 || typeIdx === -1) {
       throw new Error('CSV header must contain at least "title" and "type" columns');
@@ -150,6 +231,7 @@ export default function QuestionsPage() {
       const title = cells[titleIdx];
       const type = cells[typeIdx]?.toLowerCase();
       const body = bodyIdx !== -1 ? cells[bodyIdx] : '';
+      const explanation = explanationIdx !== -1 ? cells[explanationIdx] : '';
       
       if (!title || !type) continue;
       
@@ -159,14 +241,12 @@ export default function QuestionsPage() {
       if (type === 'mcq') {
         const rawOptions = optionsIdx !== -1 ? cells[optionsIdx] : '';
         options = rawOptions.split(/[;|]/).map(o => o.trim()).filter(Boolean);
-        const rawCorrect = correctIdx !== -1 ? cells[correctIdx] : '0';
-        correct = parseInt(rawCorrect, 10);
-        if (isNaN(correct)) correct = 0;
+        correct = correctIdx !== -1 ? cells[correctIdx] : 0;
       } else {
         correct = correctIdx !== -1 ? cells[correctIdx] : '';
       }
 
-      parsed.push({ title, type, body, options, correct });
+      parsed.push({ title, type, body, options, correct, explanation: explanation || null });
     }
     return parsed;
   };
@@ -181,14 +261,16 @@ export default function QuestionsPage() {
       if (importFile) {
         const fileText = await importFile.text();
         if (importFile.name.endsWith('.json')) {
-          questionsList = JSON.parse(fileText);
+          const parsed = JSON.parse(fileText);
+          questionsList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.questions) ? parsed.questions : parsed);
         } else if (importFile.name.endsWith('.csv')) {
           questionsList = parseCSV(fileText);
         } else {
           throw new Error('Unsupported file format. Please upload .json or .csv');
         }
       } else if (importText.trim()) {
-        questionsList = JSON.parse(importText);
+        const parsed = JSON.parse(importText);
+        questionsList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.questions) ? parsed.questions : parsed);
       } else {
         throw new Error('Please select a file or paste JSON questions');
       }
@@ -216,7 +298,11 @@ export default function QuestionsPage() {
       <div className="page-header flex-header">
         <div>
           <h1>Questions</h1>
-          <p>Create and manage exam questions</p>
+          <p>
+            {isOwner
+              ? 'Super Admin view: create, edit, and manage all exam questions across all admin accounts'
+              : 'Create, import, and manage the exam questions uploaded by your account'}
+          </p>
         </div>
         {isStaff && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -292,18 +378,34 @@ export default function QuestionsPage() {
                       {form.options.length > 2 && (
                         <button type="button" className="option-remove" onClick={() => {
                           const opts = form.options.filter((_, j) => j !== i);
-                          setForm({ ...form, options: opts, correctIndex: Math.min(form.correctIndex, opts.length - 1) });
+                          const nextCorrect =
+                            form.correctIndex === i
+                              ? 0
+                              : form.correctIndex > i
+                                ? form.correctIndex - 1
+                                : Math.min(form.correctIndex, opts.length - 1);
+                          setForm({ ...form, options: opts, correctIndex: nextCorrect });
                         }}>×</button>
                       )}
                     </div>
                   ))}
-                  {form.options.length < 6 && (
+                  {form.options.length < 8 && (
                     <button type="button" className="add-option-btn" onClick={() => setForm({ ...form, options: [...form.options, ''] })}>
                       + Add option
                     </button>
                   )}
                 </div>
               )}
+
+              <div className="form-row">
+                <label>Explanation (Optional)</label>
+                <textarea
+                  value={form.explanation}
+                  onChange={e => setForm({ ...form, explanation: e.target.value })}
+                  placeholder="Optional explanation or rationale for the answer"
+                  rows={2}
+                />
+              </div>
 
               {error && <p className="error">{error}</p>}
 
@@ -351,7 +453,8 @@ export default function QuestionsPage() {
   {
     "title": "Who is the originator of Python?",
     "type": "theory",
-    "correct": "Guido van Rossum"
+    "correct": "Guido van Rossum",
+    "explanation": "Created in 1991"
   }
 ]`}
                   rows={8}
@@ -387,10 +490,10 @@ export default function QuestionsPage() {
       {/* Questions Table */}
       <div className="panel">
         <div className="panel-body no-pad">
-          {questions.length === 0 ? (
+          {visibleQuestions.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📝</div>
-              <p>No questions yet. Create your first question!</p>
+              <p>No questions yet. Create or import your first question!</p>
             </div>
           ) : (
             <table className="data-table">
@@ -398,16 +501,29 @@ export default function QuestionsPage() {
                 <tr>
                   <th>Title</th>
                   <th>Type</th>
+                  {isOwner && <th>Created By</th>}
                   <th>Approval</th>
                   <th>Created</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {questions.map(q => (
+                {visibleQuestions.map(q => (
                   <tr key={q.id}>
-                    <td><strong>{q.title}</strong></td>
+                    <td>
+                      <strong>{q.title}</strong>
+                      {q.explanation && (
+                        <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>
+                          💡 {q.explanation}
+                        </div>
+                      )}
+                    </td>
                     <td><span className={`badge ${q.type === 'mcq' ? 'blue' : 'gray'}`}>{q.type.toUpperCase()}</span></td>
+                    {isOwner && (
+                      <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>
+                        {q.creator?.name || q.creator?.email || (q.createdBy ? `User #${q.createdBy}` : '—')}
+                      </td>
+                    )}
                     <td>
                       <span className={`badge ${q.approvalStatus === 'APPROVED' ? 'green' : q.approvalStatus === 'REJECTED' ? 'red' : 'orange'}`}>
                         {q.approvalStatus || 'APPROVED'}
@@ -420,10 +536,10 @@ export default function QuestionsPage() {
                     </td>
                     <td>{new Date(q.createdAt).toLocaleDateString()}</td>
                     <td>
-                      {isStaff ? (
+                      {canManageQuestion(q) ? (
                         <div className="btn-group">
                           <button className="btn-sm btn-outline" onClick={() => openEdit(q)}>Edit</button>
-                          <button className="btn-sm btn-danger" onClick={() => deleteQuestion(q.id)}>Delete</button>
+                          <button className="btn-sm btn-danger" onClick={() => deleteQuestion(q)}>Delete</button>
                         </div>
                       ) : '—'}
                     </td>

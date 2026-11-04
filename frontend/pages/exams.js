@@ -55,7 +55,8 @@ export default function ExamsPage() {
   const loadQuestions = async () => {
     try {
       const r = await api.get('/questions');
-      setQuestions(r.data);
+      const list = Array.isArray(r.data) ? r.data : [];
+      setQuestions(user?.role === 'OWNER' ? list : list.filter((q) => q.createdBy === user?.id));
     } catch (err) {}
   };
 
@@ -115,14 +116,28 @@ export default function ExamsPage() {
     setError('');
     if (!questionForm.title.trim()) return setError('Question title is required');
     
+    const cleanedOptions = [];
+    let mappedCorrect = -1;
+    if (questionForm.type === 'mcq') {
+      questionForm.options.forEach((o, i) => {
+        const text = String(o ?? '').trim();
+        if (!text) return;
+        if (i === questionForm.correctIndex) mappedCorrect = cleanedOptions.length;
+        cleanedOptions.push(text);
+      });
+      if (cleanedOptions.length < 2) return setError('At least 2 options are required');
+      if (mappedCorrect < 0) return setError('Please select a non-empty option as the correct answer');
+    }
+
     setSaving(true);
     try {
       const payload = {
-        title: questionForm.title,
+        title: questionForm.title.trim(),
         type: questionForm.type,
         body: questionForm.body || null,
-        options: questionForm.type === 'mcq' ? questionForm.options.filter(o => o.trim()) : null,
-        correct: questionForm.type === 'mcq' ? questionForm.correctIndex : null,
+        options: questionForm.type === 'mcq' ? cleanedOptions : null,
+        correct: questionForm.type === 'mcq' ? mappedCorrect : (questionForm.correctText || null),
+        explanation: questionForm.explanation?.trim() ? questionForm.explanation : null,
       };
       
       await api.post(`/exams/${currentExam.id}/questions/new`, payload);

@@ -41,6 +41,8 @@ model Question {
   body        String?
   options     Json?
   correct     Json?
+  /// Optional explanation shown to staff when reviewing/editing the question
+  explanation String?
   createdBy   Int?
   createdAt   DateTime @default(now())
   /// APPROVED | PENDING | REJECTED — ADMIN-created questions start PENDING; OWNER-created APPROVED
