@@ -572,8 +572,8 @@ router.post('/consolidate-folder', verifyToken, requireRole('OWNER', 'ADMIN'), a
   }
 });
 
-// Publish a Combined Result Report (OWNER or ADMIN)
-router.post('/combine-results/publish', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+// Publish a Combined Result Report — Superadmin (OWNER only)
+router.post('/combine-results/publish', verifyToken, requireRole('OWNER'), async (req, res, next) => {
   try {
     const { title, description, items, issueDate, directorName } = req.body;
     if (!title || !Array.isArray(items) || items.length < 2) {
@@ -584,6 +584,9 @@ router.post('/combine-results/publish', verifyToken, requireRole('OWNER', 'ADMIN
       text: typeof description === 'string' ? description : '',
       issueDate: issueDate || '9th September, 2025',
       directorName: directorName || 'Bakare Nafisat Opeyemi',
+      status: 'APPROVED',
+      approvedBy: req.user.sub,
+      approvedAt: new Date().toISOString(),
     };
 
     const report = await prisma.combinedResultReport.create({
@@ -612,6 +615,172 @@ router.post('/combine-results/publish', verifyToken, requireRole('OWNER', 'ADMIN
     }
 
     res.status(201).json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Request to publish Combined Result Report — ADMIN requests Superadmin (OWNER) to approve & publish
+router.post('/combine-results/request-publish', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { title, description, items, issueDate, directorName } = req.body;
+    if (!title || !Array.isArray(items) || items.length < 2) {
+      return res.status(400).json({ error: 'Title and at least 2 exam items are required' });
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { id: true, name: true, email: true },
+    });
+    const requesterName = requester?.name || requester?.email || 'An Admin';
+
+    const metaObj = {
+      text: typeof description === 'string' ? description : '',
+      issueDate: issueDate || '9th September, 2025',
+      directorName: directorName || 'Bakare Nafisat Opeyemi',
+      status: 'PENDING_APPROVAL',
+      publishRequested: true,
+      publishRequestedAt: new Date().toISOString(),
+      publishRequestedBy: req.user.sub,
+      requesterName,
+    };
+
+    const report = await prisma.combinedResultReport.create({
+      data: {
+        title,
+        description: JSON.stringify(metaObj),
+        items,
+        published: false,
+        publishedAt: new Date(),
+        createdBy: req.user.sub,
+      },
+    });
+
+    // Notify Superadmins (OWNER) via email if SMTP is configured
+    try {
+      const owners = await prisma.user.findMany({
+        where: { role: 'OWNER' },
+        select: { email: true },
+      });
+
+      const appUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
+      for (const owner of owners) {
+        if (!owner.email) continue;
+        await sendMail({
+          to: owner.email,
+          subject: `Combined Result Publish Request: "${title}"`,
+          text: `Hello Superadmin,\n\n${requesterName} has requested that you publish combined results for "${title}".\n\nPlease log in to review and approve the results:\n${appUrl}/superadmin\n\nThank you.`,
+        });
+      }
+    } catch (mailErr) {
+      console.warn('Could not send publish request email to owners:', mailErr.message);
+    }
+
+    res.status(201).json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Approve a pending Combined Result Report publish request (OWNER only)
+router.post('/combine-results/:id/approve', verifyToken, requireRole('OWNER'), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const existing = await prisma.combinedResultReport.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Combined report not found' });
+    }
+
+    let metaObj = {};
+    try {
+      if (existing.description && existing.description.startsWith('{')) {
+        metaObj = JSON.parse(existing.description);
+      }
+    } catch {}
+
+    metaObj.status = 'APPROVED';
+    metaObj.approvedBy = req.user.sub;
+    metaObj.approvedAt = new Date().toISOString();
+
+    const report = await prisma.combinedResultReport.update({
+      where: { id },
+      data: {
+        published: true,
+        publishedAt: new Date(),
+        description: JSON.stringify(metaObj),
+      },
+    });
+
+    // Mark the selected final folders as published so students can see their individual scores
+    const items = Array.isArray(report.items) ? report.items : [];
+    const examIds = items
+      .map((i) => parseInt(i.examId))
+      .filter((examId) => !Number.isNaN(examId));
+    if (examIds.length > 0) {
+      await prisma.exam.updateMany({
+        where: { id: { in: examIds } },
+        data: {
+          resultsPublished: true,
+          resultsPublishedAt: new Date(),
+        },
+      });
+    }
+
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Reject / Cancel a pending Combined Result Report publish request (OWNER or creator ADMIN)
+router.post('/combine-results/:id/reject', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const existing = await prisma.combinedResultReport.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Combined report not found' });
+    }
+
+    if (req.user.role !== 'OWNER' && existing.createdBy !== req.user.sub) {
+      return res.status(403).json({ error: 'You are not authorized to cancel this request' });
+    }
+
+    await prisma.combinedResultReport.delete({ where: { id } });
+    res.json({ ok: true, message: 'Publish request removed successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get pending Combined Result publish requests (OWNER or ADMIN)
+router.get('/combine-results/pending-requests', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const reports = await prisma.combinedResultReport.findMany({
+      where: { published: false },
+      orderBy: { createdAt: 'desc' },
+      include: { creator: { select: { id: true, name: true, email: true } } },
+    });
+
+    const formatted = reports.map((r) => {
+      let meta = {};
+      try {
+        if (r.description && r.description.startsWith('{')) {
+          meta = JSON.parse(r.description);
+        }
+      } catch {}
+
+      return {
+        ...r,
+        descriptionText: meta.text || null,
+        issueDate: meta.issueDate || '9th September, 2025',
+        directorName: meta.directorName || 'Bakare Nafisat Opeyemi',
+        status: meta.status || 'PENDING_APPROVAL',
+        requesterName: meta.requesterName || r.creator?.name || r.creator?.email || 'Admin',
+        requestedAt: meta.publishRequestedAt || r.createdAt,
+      };
+    });
+
+    res.json(formatted);
   } catch (err) {
     next(err);
   }
@@ -653,10 +822,23 @@ router.get('/combine-results/published', verifyToken, async (req, res, next) => 
   }
 });
 
-// Delete / Unpublish a Combined Result Report (OWNER or ADMIN)
+// Delete / Unpublish a Combined Result Report (OWNER only for published reports; creator ADMIN or OWNER for pending)
 router.delete('/combine-results/published/:id', verifyToken, requireRole('OWNER', 'ADMIN'), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
+    const existing = await prisma.combinedResultReport.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    if (existing.published && req.user.role !== 'OWNER') {
+      return res.status(403).json({ error: 'Only Superadmin can unpublish or delete an officially published result report.' });
+    }
+
+    if (!existing.published && req.user.role !== 'OWNER' && existing.createdBy !== req.user.sub) {
+      return res.status(403).json({ error: 'You are not authorized to cancel this request.' });
+    }
+
     await prisma.combinedResultReport.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {

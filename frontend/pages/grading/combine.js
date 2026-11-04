@@ -47,9 +47,12 @@ export default function CombineResultsPage() {
   const [publishedNotice, setPublishedNotice] = useState('');
   const [publishedReports, setPublishedReports] = useState([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
   const [selectedStudentForStatement, setSelectedStudentForStatement] = useState(null);
 
   const isStaff = user?.role === 'OWNER' || user?.role === 'ADMIN';
+  const isOwner = user?.role === 'OWNER';
 
   const loadExams = async () => {
     setLoadingExams(true);
@@ -76,6 +79,17 @@ export default function CombineResultsPage() {
     }
   };
 
+  const fetchPendingRequests = async () => {
+    setLoadingPending(true);
+    try {
+      const res = await api.get('/exams/combine-results/pending-requests');
+      setPendingRequests(res.data);
+    } catch {
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
   useEffect(() => {
     if (!user || !isStaff) return;
     loadExams().then((loadedExams) => {
@@ -98,6 +112,7 @@ export default function CombineResultsPage() {
       }
     });
     fetchPublishedReports();
+    fetchPendingRequests();
   }, [user, isStaff]);
 
   // Derived: final subject folders already created
@@ -381,7 +396,7 @@ export default function CombineResultsPage() {
     }
   };
 
-  // Publish Combined Results to Students
+  // Publish / Request Publish Combined Results to Students
   const generateAndPublish = async () => {
     setError('');
     setPublishedNotice('');
@@ -402,26 +417,67 @@ export default function CombineResultsPage() {
         };
       });
 
-      await api.post('/exams/combine-results/publish', {
+      const payload = {
         title: reportTitle.trim() || 'Combined Assessment Report',
         description: `Official Statement of Result for ${validItems.length} subjects`,
         items: itemsPayload,
         issueDate: issueDate.trim() || '9th September, 2025',
         directorName: directorName.trim() || 'Bakare Nafisat Opeyemi',
-      });
+      };
 
-      setPublishedNotice(
-        `✅ Results for "${reportTitle.trim()}" published successfully! Students can now view their official Statement of Result with fixed date "${issueDate.trim()}" on their dashboard.`
-      );
+      if (isOwner) {
+        await api.post('/exams/combine-results/publish', payload);
+        setPublishedNotice(
+          `✅ Results for "${reportTitle.trim()}" published successfully! Students can now view their official Statement of Result with fixed date "${issueDate.trim()}" on their dashboard.`
+        );
+      } else {
+        await api.post('/exams/combine-results/request-publish', payload);
+        setPublishedNotice(
+          `📩 Publish request for "${reportTitle.trim()}" submitted to Superadmin for approval! Once approved, results will be published to students.`
+        );
+      }
+
       fetchPublishedReports();
+      fetchPendingRequests();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to publish combined report.');
+      setError(err.response?.data?.error || 'Failed to submit combined report.');
     } finally {
       setPublishing(false);
     }
   };
 
+  const approvePendingRequest = async (id, title) => {
+    if (!confirm(`Approve and publish results for "${title}"? All assigned students will immediately receive access to their Statements of Result.`)) {
+      return;
+    }
+    try {
+      await api.post(`/exams/combine-results/${id}/approve`);
+      setPublishedNotice(`🎉 Report "${title}" approved and officially published to students!`);
+      fetchPublishedReports();
+      fetchPendingRequests();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to approve report.');
+    }
+  };
+
+  const rejectPendingRequest = async (id, title) => {
+    if (!confirm(`Cancel / reject publish request for "${title}"?`)) {
+      return;
+    }
+    try {
+      await api.post(`/exams/combine-results/${id}/reject`);
+      setPublishedNotice(`Publish request for "${title}" removed.`);
+      fetchPendingRequests();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to remove publish request.');
+    }
+  };
+
   const deletePublishedReport = async (id, title) => {
+    if (!isOwner) {
+      alert('Only the Superadmin can unpublish or delete an officially published result report.');
+      return;
+    }
     if (!confirm(`Are you sure you want to unpublish "${title}"? Students will no longer see this combined report on their dashboard.`)) {
       return;
     }
@@ -1319,11 +1375,26 @@ export default function CombineResultsPage() {
                           <button
                             type="button"
                             className="btn-primary"
-                            style={{ background: '#10b981', borderColor: '#10b981', padding: '10px 20px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 8 }}
+                            style={{
+                              background: isOwner ? '#10b981' : 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                              borderColor: isOwner ? '#10b981' : '#4f46e5',
+                              padding: '10px 20px',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              borderRadius: 8,
+                            }}
                             disabled={publishing || loadingReport || publishItems.length === 0}
                             onClick={generateAndPublish}
                           >
-                            {publishing ? 'Publishing…' : '📢 Publish Combined Results to Students'}
+                            {publishing
+                              ? isOwner
+                                ? 'Publishing…'
+                                : 'Sending Request…'
+                              : isOwner
+                              ? '📢 Publish Combined Results to Students'
+                              : '📩 Request Superadmin to Publish Results'}
                           </button>
                         </div>
                       </div>
@@ -1345,11 +1416,23 @@ export default function CombineResultsPage() {
                     <button
                       type="button"
                       className="btn-primary"
-                      style={{ background: '#10b981', borderColor: '#10b981', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      style={{
+                        background: isOwner ? '#10b981' : 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                        borderColor: isOwner ? '#10b981' : '#4f46e5',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
                       onClick={generateAndPublish}
                       disabled={publishing}
                     >
-                      {publishing ? 'Publishing…' : '📢 Publish Report to Students'}
+                      {publishing
+                        ? isOwner
+                          ? 'Publishing…'
+                          : 'Sending Request…'
+                        : isOwner
+                        ? '📢 Publish Report to Students'
+                        : '📩 Request Superadmin to Publish'}
                     </button>
                     <button type="button" className="btn-sm btn-outline" onClick={exportCSV}>
                       📥 Export Report to CSV
@@ -1473,8 +1556,16 @@ export default function CombineResultsPage() {
                     skillSets={report.folders.map((f) => {
                       const scoreObj = selectedStudentForStatement.folderScores[f.id];
                       const p = scoreObj && scoreObj.percent != null ? scoreObj.percent : null;
+                      const rawSubject = (f.subject || '').trim();
+                      const rawTitle = (f.title || '').trim();
+                      let skillName = rawTitle;
+                      if (rawSubject && rawSubject !== '.' && rawSubject !== '-') {
+                        if (!rawTitle.toLowerCase().includes(rawSubject.toLowerCase())) {
+                          skillName = `${rawSubject} — ${rawTitle}`;
+                        }
+                      }
                       return {
-                        name: f.subject ? `${f.subject} (${f.title})` : f.title,
+                        name: skillName,
                         score: p,
                         grade: getStatementGrade(p),
                       };
@@ -1489,6 +1580,79 @@ export default function CombineResultsPage() {
                 </div>
               </div>
             )}
+
+            {/* Pending Publish Requests (Awaiting Superadmin Approval) */}
+            <div className="panel" style={{ marginBottom: 28, border: '1px solid #fed7aa' }}>
+              <div className="panel-header" style={{ background: '#fffbeb', borderBottom: '1px solid #fed7aa' }}>
+                <h2 style={{ color: '#9a3412', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                  <span>⏳</span> Pending Publish Requests (Awaiting Superadmin Approval) ({pendingRequests.length})
+                </h2>
+              </div>
+              <div className="panel-body no-pad">
+                {loadingPending ? (
+                  <p className="helper" style={{ padding: 20 }}>Loading pending publish requests…</p>
+                ) : pendingRequests.length === 0 ? (
+                  <p className="helper" style={{ padding: 20 }}>No pending publish requests at this time.</p>
+                ) : (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Report Title</th>
+                        <th>Subjects & Folders Combined</th>
+                        <th>Requested By</th>
+                        <th>Requested Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingRequests.map((req) => (
+                        <tr key={req.id}>
+                          <td>
+                            <strong>{req.title}</strong>
+                            {req.descriptionText && <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{req.descriptionText}</div>}
+                          </td>
+                          <td>
+                            {Array.isArray(req.items)
+                              ? req.items.map((item) => `${item.title || `Folder ${item.examId}`} (${item.weight}%)`).join(' + ')
+                              : '—'}
+                          </td>
+                          <td>
+                            <strong>{req.requesterName || req.creator?.name || req.creator?.email || 'Admin'}</strong>
+                          </td>
+                          <td>{new Date(req.requestedAt).toLocaleDateString()}</td>
+                          <td>
+                            <span className="badge orange">⏳ Pending Superadmin Approval</span>
+                          </td>
+                          <td>
+                            <div className="btn-group" style={{ display: 'flex', gap: 6 }}>
+                              {isOwner && (
+                                <button
+                                  type="button"
+                                  className="btn-sm btn-success"
+                                  onClick={() => approvePendingRequest(req.id, req.title)}
+                                >
+                                  ✅ Approve & Publish
+                                </button>
+                              )}
+                              {(isOwner || req.createdBy === user?.id) && (
+                                <button
+                                  type="button"
+                                  className="btn-sm btn-outline"
+                                  onClick={() => rejectPendingRequest(req.id, req.title)}
+                                >
+                                  {isOwner ? '❌ Reject' : 'Cancel Request'}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
 
             {/* Currently Published Combined Reports List */}
             <div className="panel">
@@ -1530,13 +1694,17 @@ export default function CombineResultsPage() {
                           <td>{p.creator?.name || p.creator?.email || 'Superadmin'}</td>
                           <td>{new Date(p.publishedAt).toLocaleDateString()}</td>
                           <td>
-                            <button
-                              type="button"
-                              className="btn-sm btn-danger"
-                              onClick={() => deletePublishedReport(p.id, p.title)}
-                            >
-                              Unpublish / Delete
-                            </button>
+                            {isOwner ? (
+                              <button
+                                type="button"
+                                className="btn-sm btn-danger"
+                                onClick={() => deletePublishedReport(p.id, p.title)}
+                              >
+                                Unpublish / Delete
+                              </button>
+                            ) : (
+                              <span className="badge green">Published</span>
+                            )}
                           </td>
                         </tr>
                       ))}

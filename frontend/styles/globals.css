@@ -962,13 +962,38 @@ textarea { min-height: 100px; resize: vertical; }
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-top: 36px;
-  padding-bottom: 8px;
+  margin-top: 24px;
+  padding-bottom: 4px;
 }
 
 .signature-col {
   text-align: center;
   min-width: 220px;
+}
+
+.signature-stamp-box {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 58px;
+  margin-bottom: 2px;
+}
+
+.director-stamp-img {
+  max-height: 60px;
+  max-width: 170px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.signature-date-spacer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: 58px;
+  margin-bottom: 2px;
 }
 
 .signature-rule {
@@ -1024,8 +1049,12 @@ textarea { min-height: 100px; resize: vertical; }
   color: #0f172a;
 }
 
+.print-only {
+  display: none;
+}
+
 /* ═══════════════════════════════════════════════════════════
-   PRINT STYLES FOR STATEMENT OF RESULT
+   PRINT STYLES FOR STATEMENT OF RESULT (STRICT 1-PAGE A4)
    ═══════════════════════════════════════════════════════════ */
 
 @media print {
@@ -1034,73 +1063,240 @@ textarea { min-height: 100px; resize: vertical; }
     margin: 8mm 10mm;
   }
 
-  body, html, #__next {
+  /* 1. Global Reset */
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
     height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  /* Hide everything except the statement sheet */
-  .sidebar,
-  .topbar,
-  .no-print,
-  .statement-actions,
-  .page-header,
-  .stats-grid,
-  .panel,
-  .modal-overlay > *:not(.printable-modal-content),
-  button {
-    display: none !important;
-  }
-
-  .modal-overlay {
-    position: static !important;
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    display: block !important;
-    inset: auto !important;
-  }
-
-  .modal,
-  .printable-modal-content {
-    background: #ffffff !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    max-height: none !important;
+    min-height: auto !important;
     overflow: visible !important;
   }
 
-  .statement-of-result-wrapper {
-    width: 100% !important;
+  /* 2. Completely collapse and hide everything outside the statement */
+  aside,
+  header,
+  nav,
+  .sidebar,
+  .top-nav,
+  .page-header,
+  .tabs,
+  .workflow-tabs,
+  .alert,
+  .btn,
+  button,
+  .no-print,
+  .statement-actions,
+  .table-responsive,
+  .scoreboard-preview-section {
+    display: none !important;
+  }
+
+  /* Hide any card that does not contain the statement */
+  .card:not(:has(.statement-of-result-wrapper)) {
+    display: none !important;
+  }
+
+  /* 3. Reset all parent wrappers so the statement starts at (0, 0) of Page 1 */
+  .dashboard-layout,
+  .main-content,
+  .modal-overlay,
+  .printable-modal-content {
+    all: unset !important;
+    display: block !important;
+    position: static !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .statement-of-result-wrapper {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    background: #ffffff !important;
+  }
+
+  .print-only {
+    display: block !important;
   }
 
   .statement-sheet {
+    position: relative !important;
     box-shadow: none !important;
     border: none !important;
     margin: 0 auto !important;
     padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
+  /* Compact frame and contents to guarantee fitting on 1 single page */
   .statement-frame {
     border: 2px solid #000000 !important;
-    padding: 20px 24px !important;
-    min-height: 940px !important;
+    padding: 16px 20px !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
   }
 
-  .statement-results-table,
+  .statement-brand-row {
+    margin-bottom: 8px !important;
+  }
+
+  .statement-logo-img {
+    height: 52px !important;
+    width: auto !important;
+  }
+
+  .statement-divider-thick {
+    margin: 8px 0 6px !important;
+    height: 2px !important;
+  }
+
+  .statement-contact-bar {
+    font-size: 10.5px !important;
+    padding: 0 !important;
+    gap: 6px !important;
+  }
+
+  .statement-address-block {
+    font-size: 10px !important;
+    margin-top: 2px !important;
+    margin-bottom: 8px !important;
+    line-height: 1.3 !important;
+  }
+
+  .statement-title-section {
+    margin: 6px 0 8px !important;
+  }
+
+  .statement-main-title {
+    font-size: 22px !important;
+    margin: 0 0 3px !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  .statement-certify-sub {
+    font-size: 12.5px !important;
+    margin: 0 0 3px !important;
+  }
+
+  .statement-student-name {
+    font-size: 18px !important;
+    margin: 0 0 2px !important;
+  }
+
+  .statement-matric-sub {
+    font-size: 11px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .statement-intro-paragraph {
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    margin: 4px auto !important;
+  }
+
+  .statement-results-lead {
+    font-size: 11.5px !important;
+    margin: 4px 0 6px !important;
+  }
+
+  .statement-table-wrapper {
+    margin: 6px auto 8px !important;
+    max-width: 100% !important;
+  }
+
+  .statement-results-table {
+    font-size: 11.5px !important;
+    border-color: #000000 !important;
+  }
+
   .statement-results-table th,
   .statement-results-table td {
+    padding: 5px 8px !important;
     border-color: #000000 !important;
+  }
+
+  .statement-results-table th {
+    background: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .statement-results-table .cumulative-row td {
+    padding: 6px 8px !important;
+  }
+
+  .statement-grading-scale {
+    margin: 6px 0 8px !important;
+    font-size: 10.5px !important;
+    line-height: 1.3 !important;
+  }
+
+  .grading-scale-heading {
+    font-size: 11px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .statement-declaration-box {
+    margin-top: 4px !important;
+  }
+
+  .statement-divider-thin {
+    margin: 6px 0 4px !important;
+  }
+
+  .statement-declaration-text {
+    font-size: 10.5px !important;
+    line-height: 1.3 !important;
+  }
+
+  .statement-signatures-section {
+    margin-top: 10px !important;
+    padding-bottom: 0 !important;
+  }
+
+  .signature-stamp-box,
+  .signature-date-spacer {
+    min-height: 48px !important;
+  }
+
+  .director-stamp-img {
+    max-height: 50px !important;
+    max-width: 145px !important;
+    display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .signer-name,
+  .date-label {
+    font-size: 12px !important;
+  }
+
+  .signer-title {
+    font-size: 10.5px !important;
   }
 }

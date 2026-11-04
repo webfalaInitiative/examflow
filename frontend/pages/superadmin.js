@@ -13,6 +13,7 @@ export default function SuperadminPage() {
   const [pendingQuestions, setPendingQuestions] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [pendingPublish, setPendingPublish] = useState([]);
+  const [pendingCombined, setPendingCombined] = useState([]);
   const [tab, setTab] = useState('publish');
   const [err, setErr] = useState('');
 
@@ -22,6 +23,7 @@ export default function SuperadminPage() {
     api.get('/moderation/questions/pending').then((r) => setPendingQuestions(r.data)).catch(() => {});
     api.get('/moderation/users/pending').then((r) => setPendingUsers(r.data)).catch(() => {});
     api.get('/moderation/exams/pending-publish').then((r) => setPendingPublish(r.data)).catch(() => {});
+    api.get('/exams/combine-results/pending-requests').then((r) => setPendingCombined(r.data)).catch(() => {});
   };
 
   useEffect(() => {
@@ -61,6 +63,26 @@ export default function SuperadminPage() {
     }
   };
 
+  const approveCombined = async (id, title) => {
+    if (!window.confirm(`Approve and publish results for "${title}"? Students will immediately see their Statements of Result.`)) return;
+    try {
+      await api.post(`/exams/combine-results/${id}/approve`);
+      loadAll();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Approve failed');
+    }
+  };
+
+  const rejectCombined = async (id, title) => {
+    if (!window.confirm(`Reject / remove publish request for "${title}"?`)) return;
+    try {
+      await api.post(`/exams/combine-results/${id}/reject`);
+      loadAll();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Reject failed');
+    }
+  };
+
   return (
     <RequireAuth>
       <DashboardLayout>
@@ -78,7 +100,7 @@ export default function SuperadminPage() {
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-body" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {[
-                  { id: 'publish', label: `Publish requests (${pendingPublish.length})` },
+                  { id: 'publish', label: `Publish requests (${pendingPublish.length + pendingCombined.length})` },
                   { id: 'questions', label: `Pending questions (${pendingQuestions.length})` },
                   { id: 'students', label: `Pending students (${pendingUsers.length})` },
                   { id: 'history', label: 'History' },
@@ -96,44 +118,106 @@ export default function SuperadminPage() {
             </div>
 
             {tab === 'publish' && (
-              <div className="panel">
-                <div className="panel-header"><h2>Result publish requests from Admins</h2></div>
-                <div className="panel-body no-pad">
-                  {pendingPublish.length === 0 ? (
-                    <div className="empty-state"><p>No pending publish requests.</p></div>
-                  ) : (
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Exam Title</th>
-                          <th>Created By</th>
-                          <th>Requested</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pendingPublish.map((e) => (
-                          <tr key={e.id}>
-                            <td><strong>{e.title}</strong></td>
-                            <td>{e.creator?.name || e.creator?.email || 'Admin'}</td>
-                            <td>{e.publishRequestedAt ? new Date(e.publishRequestedAt).toLocaleString() : 'Recently'}</td>
-                            <td>
-                              <div className="btn-group">
-                                <button type="button" className="btn-sm btn-success" onClick={() => publishExam(e.id)}>
-                                  Publish Results
-                                </button>
-                                <Link href={`/exams/${e.id}/grading`} className="btn-sm btn-outline">
-                                  Review Scoreboard →
-                                </Link>
-                              </div>
-                            </td>
+              <>
+                <div className="panel" style={{ marginBottom: 24 }}>
+                  <div className="panel-header">
+                    <h2>Combined Assessment Result Publish Requests ({pendingCombined.length})</h2>
+                  </div>
+                  <div className="panel-body no-pad">
+                    {pendingCombined.length === 0 ? (
+                      <div className="empty-state"><p>No pending combined result publish requests.</p></div>
+                    ) : (
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Report Title</th>
+                            <th>Combined Folders</th>
+                            <th>Requested By</th>
+                            <th>Requested</th>
+                            <th>Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody>
+                          {pendingCombined.map((c) => (
+                            <tr key={c.id}>
+                              <td><strong>{c.title}</strong></td>
+                              <td>
+                                {Array.isArray(c.items)
+                                  ? c.items.map((i) => `${i.title || `Folder ${i.examId}`} (${i.weight}%)`).join(' + ')
+                                  : '—'}
+                              </td>
+                              <td>{c.requesterName || c.creator?.name || c.creator?.email || 'Admin'}</td>
+                              <td>{c.requestedAt ? new Date(c.requestedAt).toLocaleString() : 'Recently'}</td>
+                              <td>
+                                <div className="btn-group" style={{ display: 'flex', gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    className="btn-sm btn-success"
+                                    onClick={() => approveCombined(c.id, c.title)}
+                                  >
+                                    ✅ Approve & Publish
+                                  </button>
+                                  <Link href="/grading/combine" className="btn-sm btn-outline">
+                                    Review in Combine Tool →
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    className="btn-sm btn-outline"
+                                    onClick={() => rejectCombined(c.id, c.title)}
+                                  >
+                                    ❌ Reject
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 </div>
-              </div>
+
+                <div className="panel">
+                  <div className="panel-header">
+                    <h2>Single Exam Folder Publish Requests ({pendingPublish.length})</h2>
+                  </div>
+                  <div className="panel-body no-pad">
+                    {pendingPublish.length === 0 ? (
+                      <div className="empty-state"><p>No pending exam publish requests.</p></div>
+                    ) : (
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>Exam Title</th>
+                            <th>Created By</th>
+                            <th>Requested</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pendingPublish.map((e) => (
+                            <tr key={e.id}>
+                              <td><strong>{e.title}</strong></td>
+                              <td>{e.creator?.name || e.creator?.email || 'Admin'}</td>
+                              <td>{e.publishRequestedAt ? new Date(e.publishRequestedAt).toLocaleString() : 'Recently'}</td>
+                              <td>
+                                <div className="btn-group">
+                                  <button type="button" className="btn-sm btn-success" onClick={() => publishExam(e.id)}>
+                                    ✅ Publish Results
+                                  </button>
+                                  <Link href={`/exams/${e.id}/grading`} className="btn-sm btn-outline">
+                                    Review Scoreboard →
+                                  </Link>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
 
             {tab === 'history' && (
