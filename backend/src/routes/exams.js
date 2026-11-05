@@ -258,12 +258,12 @@ async function getExamScoreboardData(examId) {
         // In manual mode, student is ready if at least one component (MCQ or Theory) is entered
         gradingComplete = mcqPercent != null || theoryPercent != null;
       } else {
-        mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? (mcqPoints / nMcq) * 100 : null);
+        mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? Math.round((mcqPoints / nMcq) * 100) : null);
         if (nTheory > 0) {
           if (manualTheory != null) {
             theoryPercent = manualTheory;
           } else if (theoryGradedCount === nTheory) {
-            theoryPercent = (theoryPoints / nTheory) * 100;
+            theoryPercent = Math.round((theoryPoints / nTheory) * 100);
           }
         } else if (manualTheory != null) {
           theoryPercent = manualTheory;
@@ -277,7 +277,7 @@ async function getExamScoreboardData(examId) {
       let finalPercent = null;
       if (gradingComplete) {
         if (mcqPercent != null && theoryPercent != null) {
-          finalPercent = (mcqPercent + theoryPercent) / 2;
+          finalPercent = Math.round(((mcqPercent + theoryPercent) / 2) * 100) / 100;
         } else if (mcqPercent != null) {
           finalPercent = mcqPercent;
         } else if (theoryPercent != null) {
@@ -1331,12 +1331,12 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
           theoryPercent = manualTheory;
           gradingComplete = mcqPercent != null || theoryPercent != null;
         } else {
-          mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? (mcqPoints / nMcq) * 100 : null);
+          mcqPercent = manualMcq != null ? manualMcq : (nMcq > 0 ? Math.round((mcqPoints / nMcq) * 100) : null);
           if (nTheory > 0) {
             if (manualTheory != null) {
               theoryPercent = manualTheory;
             } else if (theoryGradedCount === nTheory) {
-              theoryPercent = (theoryPoints / nTheory) * 100;
+              theoryPercent = Math.round((theoryPoints / nTheory) * 100);
             }
           } else if (manualTheory != null) {
             theoryPercent = manualTheory;
@@ -1350,7 +1350,7 @@ router.get('/my-results', verifyToken, async (req, res, next) => {
         let finalPercent = null;
         if (gradingComplete) {
           if (mcqPercent != null && theoryPercent != null) {
-            finalPercent = (mcqPercent + theoryPercent) / 2;
+            finalPercent = Math.round(((mcqPercent + theoryPercent) / 2) * 100) / 100;
           } else if (mcqPercent != null) {
             finalPercent = mcqPercent;
           } else if (theoryPercent != null) {

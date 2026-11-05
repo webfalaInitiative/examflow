@@ -4,6 +4,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import FormattedText from '../components/FormattedText';
 
 export default function GradingPublishOverviewPage() {
   const { user } = useAuth();
@@ -220,7 +221,12 @@ export default function GradingPublishOverviewPage() {
                           </div>
                         )}
 
-                        <p style={{ marginTop: 6, color: '#6b7280', fontSize: 14 }}>{exam.description || 'No description provided'}</p>
+                        <FormattedText
+                          text={exam.description}
+                          fallback="No description provided"
+                          style={{ marginTop: 6, color: '#6b7280', fontSize: 14 }}
+                          linkStyle={{ color: '#2563eb', fontWeight: 700 }}
+                        />
 
                         <div className="exam-stats" style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                           {isManual ? (

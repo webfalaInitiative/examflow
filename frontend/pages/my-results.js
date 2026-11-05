@@ -5,6 +5,7 @@ import RequireAuth from '../components/RequireAuth';
 import StatementOfResult, { getStatementGrade } from '../components/StatementOfResult';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import FormattedText from '../components/FormattedText';
 
 export default function MyResultsPage() {
   const { user } = useAuth();
@@ -484,9 +485,11 @@ export default function MyResultsPage() {
                         <td>
                           <strong>{r.title}</strong>
                           {r.description && (
-                            <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: 2 }}>
-                              {r.description}
-                            </div>
+                            <FormattedText
+                              text={r.description}
+                              style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginTop: 2 }}
+                              linkStyle={{ color: '#2563eb', fontWeight: 600 }}
+                            />
                           )}
                         </td>
                         <td>{r.nQuestions}</td>

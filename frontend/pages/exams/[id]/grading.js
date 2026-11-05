@@ -6,6 +6,8 @@ import RequireAuth from '../../../components/RequireAuth';
 import { useAuth } from '../../../context/AuthContext';
 import api from '../../../lib/api';
 
+const fmtNum = (n) => (Number.isInteger(Math.round(n * 100) / 100) ? String(Math.round(n * 100) / 100) : (Math.round(n * 10) / 10).toFixed(1));
+
 export default function ExamGradingPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -113,7 +115,7 @@ export default function ExamGradingPage() {
     } finally {
       setSavingAll(false);
     }
-  };
+  }; 
 
   const assignAllStudents = async () => {
     if (!window.confirm('Add all registered active candidates to this folder?')) return;
@@ -189,10 +191,10 @@ export default function ExamGradingPage() {
         `"${row.user.name || ''}"`,
         `"${row.user.matricNumber || '—'}"`,
         `"${row.user.email || ''}"`,
-        row.mcqPercent != null ? `${row.mcqPercent.toFixed(1)}%` : '—',
-        row.theoryPercent != null ? `${row.theoryPercent.toFixed(1)}%` : '—',
-        row.finalPercent != null ? `${row.finalPercent.toFixed(1)}%` : '—',
-        row.scaledScore != null ? `${row.scaledScore.toFixed(1)} / ${maxScale}%` : '—',
+        row.mcqPercent != null ? `${fmtNum(row.mcqPercent)}%` : '—',
+        row.theoryPercent != null ? `${fmtNum(row.theoryPercent)}%` : '—',
+        row.finalPercent != null ? `${fmtNum(row.finalPercent)}%` : '—',
+        row.scaledScore != null ? `${fmtNum(row.scaledScore)} / ${maxScale}%` : '—',
         `"${row.gradingComplete ? (row.finalPercent >= 40 ? 'Passed' : 'Failed') : 'Pending'}"`,
       ];
       csvLines.push(line.join(','));
@@ -437,7 +439,7 @@ export default function ExamGradingPage() {
                                   placeholder="0–100"
                                 />
                               ) : (
-                                <span>{row.mcqPercent != null ? `${row.mcqPercent.toFixed(0)}%` : '—'}</span>
+                                <span>{row.mcqPercent != null ? `${fmtNum(row.mcqPercent)}%` : '—'}</span>
                               )}
                             </td>
 
@@ -464,14 +466,14 @@ export default function ExamGradingPage() {
                             {/* Raw Final % */}
                             <td>
                               <span style={{ fontWeight: 600 }}>
-                                {finalPercent != null ? `${finalPercent.toFixed(1)}%` : '—'}
+                                {finalPercent != null ? `${fmtNum(finalPercent)}%` : '—'}
                               </span>
                             </td>
 
                             {/* Scaled Score */}
                             <td>
                               <strong style={{ color: 'var(--primary, #4338ca)', fontSize: 15 }}>
-                                {scaledScore != null ? `${scaledScore.toFixed(1)} / ${exam?.maxScale || 100}%` : '—'}
+                                {scaledScore != null ? `${fmtNum(scaledScore)} / ${exam?.maxScale || 100}%` : '—'}
                               </strong>
                             </td>
 

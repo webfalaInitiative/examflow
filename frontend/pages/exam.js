@@ -5,6 +5,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
+import FormattedText, { hasUrl } from '../components/FormattedText';
 
 export default function ExamPage() {
   const { user } = useAuth();
@@ -297,11 +298,40 @@ export default function ExamPage() {
                 emailed when they are ready.
               </p>
             )}
-            <p>
-              {exam
-                ? exam.description || 'No description'
-                : `${available.length} question${available.length !== 1 ? 's' : ''} available`}
-            </p>
+            {exam ? (
+              exam.description ? (
+                hasUrl(exam.description) ? (
+                  <div
+                    style={{
+                      margin: '10px 0 12px',
+                      padding: '12px 16px',
+                      background: '#f8fafc',
+                      border: '1.5px solid #cbd5e1',
+                      borderRadius: 8,
+                      borderLeft: '4px solid #2563eb',
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>📌</span> Instructions & External Links:
+                    </div>
+                    <FormattedText
+                      text={exam.description}
+                      style={{ fontSize: 14, color: '#334155', lineHeight: 1.6 }}
+                      linkStyle={{ color: '#1d4ed8', fontWeight: 700, textDecoration: 'underline' }}
+                    />
+                  </div>
+                ) : (
+                  <FormattedText
+                    text={exam.description}
+                    style={{ margin: '6px 0', color: 'var(--gray-600)', fontSize: 14 }}
+                  />
+                )
+              ) : (
+                <p style={{ color: 'var(--gray-500)', margin: '6px 0' }}>No description</p>
+              )
+            ) : (
+              <p style={{ margin: '6px 0' }}>{`${available.length} question${available.length !== 1 ? 's' : ''} available`}</p>
+            )}
             <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
               {exam && <span className="stat-pill">📋 {unansweredCount} unanswered</span>}
               {exam && exam.duration && <span className="stat-pill">⏳ {exam.duration} mins total</span>}
@@ -587,7 +617,9 @@ function ExamQuestionCard({
         </span>
       </div>
 
-      {q.body && <div className="q-body">{q.body}</div>}
+      {q.body && (
+        <FormattedText text={q.body} className="q-body" style={{ marginBottom: '15px' }} />
+      )}
 
       {!isDone && q.type === 'mcq' && (
         <div className="options-container">

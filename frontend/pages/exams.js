@@ -4,6 +4,7 @@ import RequireAuth from '../components/RequireAuth';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import Link from 'next/link';
+import FormattedText from '../components/FormattedText';
 
 export default function ExamsPage() {
   const { user } = useAuth();
@@ -214,7 +215,12 @@ export default function ExamsPage() {
                 <div className="exam-card-icon">📁</div>
                 <div className="exam-card-info">
                   <h3>{exam.title}</h3>
-                  <p>{exam.description || 'No description'}</p>
+                  <FormattedText
+                    text={exam.description}
+                    fallback="No description"
+                    style={{ color: 'var(--gray-600)', fontSize: 14, margin: '4px 0 8px' }}
+                    linkStyle={{ color: '#2563eb', fontWeight: 700 }}
+                  />
                   <div className="exam-stats">
                     <span>{exam._count?.questions ?? 0} Questions</span>
                     {exam.duration && <span>• {exam.duration} Min</span>}
@@ -321,8 +327,16 @@ export default function ExamsPage() {
               )}
 
               <div className="form-row">
-                <label>Description</label>
-                <textarea value={examForm.description} onChange={e => setExamForm({ ...examForm, description: e.target.value })} placeholder="Short description..." />
+                <label>Description & Instructions (e.g. Google Form link for Section B)</label>
+                <textarea
+                  value={examForm.description}
+                  onChange={e => setExamForm({ ...examForm, description: e.target.value })}
+                  placeholder="Paste instructions, guidelines, or links (e.g. Google Form link for Section B: https://forms.gle/...)..."
+                  rows={3}
+                />
+                <small style={{ color: '#6b7280', fontSize: 12, marginTop: 4, display: 'block' }}>
+                  💡 Links pasted here (e.g. Google Forms) will automatically display as clickable links for candidates.
+                </small>
               </div>
               <div className="form-row">
                 <label>Duration (Minutes)</label>
